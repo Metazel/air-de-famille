@@ -1,0 +1,24 @@
+AIR DE FAMILLE — version 2.0 installable (PWA)
+
+Installer sur Android
+1. Hébergez le contenu de ce dossier sur un site en https (exemple gratuit : GitHub Pages).
+   - Créez un dépôt GitHub, déposez-y tous les fichiers (index.html à la racine).
+   - Settings > Pages > Branch : main, dossier / (root) > Save.
+2. Ouvrez l'adresse obtenue dans Chrome sur le téléphone.
+3. Bouton « Installer l'application » dans la page, ou menu ⋮ > « Installer l'application ».
+Après le premier lancement, l'application fonctionne sans réseau.
+
+Ce que fait l'application
+- Comparer : 2 ou 3 photos, score global, trait par trait, héritage des traits, image à partager.
+- Album de famille : plusieurs photos par personne ; chaque paire de personnes est comparée
+  sur ses photos d'âges les plus proches (dates EXIF lues automatiquement).
+- Vieillir : simulation d'âge (bébé, enfant, ado, adulte, âgé).
+- Fusion : mélange de deux visages, « enfant virtuel ».
+
+Confidentialité
+- Les photos sont analysées sur le téléphone. Une politique de sécurité (CSP) interdit
+  techniquement toute connexion vers un autre site : aucune donnée ne peut sortir.
+- Seuls les prénoms et dates de naissance peuvent être mémorisés, et seulement si vous cochez
+  la case prévue dans l'album. Les photos ne sont jamais enregistrées.
+
+Mise à jour : remplacez les fichiers sur l'hébergement ; la nouvelle version est prise au lancement suivant.
