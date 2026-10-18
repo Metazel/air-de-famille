@@ -11,3 +11,5 @@ Ce dépôt ne contient que le code de l'application.
 Ouvrir l'application : `https://metazel.github.io/air-de-famille/`
 
 Ce n'est pas un test de parenté.
+
+Licence : usage personnel et non commercial uniquement, voir LICENSE.
