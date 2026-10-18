@@ -8,6 +8,6 @@ retrouve qui ressemble à qui dans une famille à âge égal, et propose des sim
 stockée sur ce site ; une politique de sécurité (CSP) interdit toute connexion vers un autre site.
 Ce dépôt ne contient que le code de l'application.
 
-Ouvrir l'application : `https://<identifiant>.github.io/air-de-famille/`
+Ouvrir l'application : `https://metazel.github.io/air-de-famille/`
 
 Ce n'est pas un test de parenté.
