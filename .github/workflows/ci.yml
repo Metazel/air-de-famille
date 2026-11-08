@@ -51,7 +51,7 @@ jobs:
 
       - name: Rapport
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rapport-e2e
           path: rapport_e2e.json
