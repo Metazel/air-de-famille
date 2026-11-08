@@ -12,6 +12,7 @@ axe-core WCAG A/AA (4 onglets, thèmes clair et sombre), largeur téléphone, fo
 au clavier, entrées aux limites, stockage local, service worker et hors ligne.
 """
 import sys, os, json, time, random, tempfile, threading, functools, subprocess, http.server, socketserver
+from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 from PIL import Image, ImageDraw
 
@@ -21,6 +22,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 AXE = os.environ.get("AXE", os.path.join(HERE, "node_modules", "axe-core", "axe.min.js"))
 CHROME = os.environ.get("CHROME") or None
 results = []
+connus = []  # écarts connus et suivis au registre, non bloquants
+
+# Politique attendue, identique à tests/garde_fous.sh : toute différence échoue.
+CSP_ATTENDUE = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; "
+                "manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
+
+# Écarts connus, déclarés finement : (règle axe, sélecteurs concernés) et éléments sans contour de focus.
+AXE_CONNUS = {"label-content-name-mismatch": ({'button[aria-label="Choisir la photo A"]', 'button[aria-label="Choisir la photo B"]',
+                                                'button[aria-label="Choisir la photo C"]'}, "AdF-011")}
+FOCUS_CONNUS = ({"name0", "name1", "name2"}, "AdF-012")
 
 
 def make_fixtures():
@@ -72,19 +84,33 @@ def run_axe(page, label):
     if not page.evaluate("!!window.axe"):
         page.evaluate(AXE_SRC + ";0")
     r = page.evaluate("""async () => { const r = await axe.run(document, {runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}});
-      return r.violations.map(v => ({id:v.id, impact:v.impact, n:v.nodes.length, t:v.nodes[0]&&v.nodes[0].target.join(' ')})) }""")
-    check(f"axe-core WCAG A/AA — {label}", not r, r)
+      return r.violations.map(v => ({id:v.id, impact:v.impact, targets:v.nodes.map(n => n.target.join(' '))})) }""")
+    restants = []
+    for v in r:
+        connu = AXE_CONNUS.get(v["id"])
+        if connu and set(v["targets"]) <= connu[0]:
+            connus.append(f"{label} : {v['id']} → {connu[1]}")
+        else:
+            restants.append(v)
+    check(f"axe-core WCAG A/AA — {label}", not restants, restants)
 
 
 base = serve()
-origin = base.split("/")[2]
+ORIGINE = urlparse(base).netloc
+
+
+def externe(url):
+    return not url.startswith(("data:", "blob:")) and urlparse(url).netloc != ORIGINE
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=CHROME, args=["--no-sandbox", "--ignore-certificate-errors"])
     ctx = b.new_context(ignore_https_errors=True, viewport={"width": 360, "height": 800}, device_scale_factor=2, is_mobile=True, has_touch=True, locale="fr-FR")
     page = ctx.new_page()
     errors, external, steps = [], [], []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.on("request", lambda r: external.append(r.url) if origin not in r.url and not r.url.startswith(("data:", "blob:")) else None)
+    # Toutes les requêtes du contexte, service worker compris.
+    ctx.on("request", lambda r: external.append(r.url) if externe(r.url) else None)
+    # Toute violation de CSP pendant les tests est comptée.
+    ctx.add_init_script("window.__csp=[];document.addEventListener('securitypolicyviolation',e=>window.__csp.push(e.violatedDirective+' '+e.blockedURI));")
 
     page.add_init_script("""window.__steps=[];new MutationObserver(()=>{const t=document.body&&document.body.innerText||'';
       for(const l of t.split('\\n')) if(/Chargement|Initialisation|Préparation/.test(l)&&!window.__steps.includes(l.trim())) window.__steps.push(l.trim().slice(0,80));})
@@ -96,10 +122,8 @@ with sync_playwright() as p:
     page.goto(base, wait_until="load")
     check("Page chargée, titre", "Air de famille" in page.title(), page.title())
     csp = page.evaluate("document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]')?.content || ''")
-    for d in ["default-src 'self'", "connect-src 'self'", "object-src 'none'", "form-action 'none'", "base-uri 'none'"]:
-        check(f"CSP contient {d}", d in csp)
-    check("CSP sans unsafe-eval", "'unsafe-eval'" not in csp)
-    check("CSP sans unsafe-inline pour les scripts", "script-src 'self' 'wasm-unsafe-eval'" in csp)
+    norm = lambda c: sorted(" ".join(d.split()) for d in c.split(";") if d.strip())
+    check("CSP identique à la politique attendue", norm(csp) == norm(CSP_ATTENDUE), csp)
 
     # Progression du moteur : on échantillonne les textes visibles
     seen = set()
@@ -117,7 +141,7 @@ with sync_playwright() as p:
     seen = page.evaluate("window.__steps")
     check("Progression affichée pendant le chargement", len(seen) >= 2, seen[:6])
     page.unroute("**/model/**")
-    check("Aucune requête vers un autre site", not external, external[:5])
+    check("Aucune requête vers un autre site (chargement)", not external, external[:5])
 
     # Accessibilité : 4 onglets, thèmes clair et sombre
     for scheme in ["light", "dark"]:
@@ -141,7 +165,10 @@ with sync_playwright() as p:
         info = page.evaluate("(()=>{const a=document.activeElement,c=getComputedStyle(a);return [a.id||a.className, c.outlineStyle, c.boxShadow]})()")
         if info[0] and info[1] == "none" and info[2] == "none":
             weak.append(info[0])
-    check("Focus visible au clavier (contour) sur les 10 premiers éléments", not weak, sorted(set(weak)))
+    faibles = set(weak) - FOCUS_CONNUS[0]
+    if set(weak) & FOCUS_CONNUS[0]:
+        connus.append(f"focus sans contour : {sorted(set(weak) & FOCUS_CONNUS[0])} → {FOCUS_CONNUS[1]}")
+    check("Focus visible au clavier (contour) sur les 10 premiers éléments", not faibles, sorted(faibles))
 
     # Entrées aux limites
     def load(fname):
@@ -205,20 +232,19 @@ with sync_playwright() as p:
         check("Hors ligne : page servie par le cache", False, e)
     ctx.set_offline(False)
 
+    check("Aucune requête vers un autre site (fin des tests, service worker compris)", not external, external[:5])
+    try:
+        viol = page.evaluate("window.__csp || []")
+    except Exception:
+        viol = []
+    check("Aucune violation de CSP sur la dernière page", not viol, viol[:5])
     real_errors = [e for e in errors if "Failed to load resource" not in e]
     check("Aucune erreur JavaScript", not real_errors, real_errors[:3])
     b.close()
 
-# Écarts connus et suivis dans le registre (non bloquants, gravité mineure).
-CONNUS = {
-    "axe-core WCAG A/AA — comparer / light": "AdF-011",
-    "axe-core WCAG A/AA — comparer / dark": "AdF-011",
-    "Focus visible au clavier (contour) sur les 10 premiers éléments": "AdF-012",
-}
-fails = [r for r in results if not r[1] and r[0] not in CONNUS]
-for n, o, _ in results:
-    if not o and n in CONNUS:
-        print(f"CONNU {n} → {CONNUS[n]} (mineur, non bloquant)")
+fails = [r for r in results if not r[1]]
+for c in connus:
+    print(f"CONNU {c} (suivi au registre, non bloquant)")
 print(f"\n{sum(1 for r in results if r[1])}/{len(results)} contrôles réussis, {len(fails)} échec(s) bloquant(s)")
 json.dump([{"test": n, "ok": o, "detail": str(d)} for n, o, d in results], open(os.environ.get("RAPPORT", "rapport_e2e.json"), "w"), ensure_ascii=False, indent=1)
 sys.exit(1 if fails else 0)
