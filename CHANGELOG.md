@@ -3,21 +3,44 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.3.0] — 2026-11-08
+
+Lot 2 du cadrage : prise de vue guidée (CU1, CU2, AdF-016).
+
+- Ajout : bouton « Prise de vue guidée » sur chaque photo. L'accord de la personne photographiée
+  (ou de ses parents pour un enfant) est demandé avant d'ouvrir la caméra.
+- Seul, caméra avant, lunettes retirées : consignes par la voix (français ou anglais), des bips
+  qui s'accélèrent près du bon cadrage, des vibrations et un texte en gros caractères. Une consigne
+  à la fois : la lumière d'abord, puis le téléphone (distance, position), puis la tête (petits angles).
+  Capture automatique après stabilité, avec « 3, 2, 1 » ; bouton « Prendre la photo » toujours là.
+- Un proche, caméra arrière : consignes adaptées (« visez plus à gauche », « demandez à la personne
+  de regarder l'objectif »).
+- La photo prise passe par le contrôle de qualité ; « Autre photo » rouvre la caméra.
+- Rien n'est enregistré ni envoyé ; la caméra s'arrête à la fermeture et quand l'application passe
+  en arrière-plan (« Reprendre la caméra » au retour). « Choisir une photo à la place » toujours proposé.
+- Lecteur d'écran : si la voix de l'application est coupée, les consignes sont lues par TalkBack ;
+  jamais les deux en même temps. Le focus revient sur la photo après la prise.
+- L'âge est déduit de la date de la prise quand la date de naissance est connue.
+- Corrigé avant mise en ligne (relecture) : caméra qui pouvait se rallumer après fermeture
+  (AdF-031), prises multiples (AdF-032), lumière mal mesurée en portrait (AdF-033), consignes
+  instables et annonces coupées (AdF-034), changement de caméra ou arrière-plan pendant l'ouverture
+  et prise qui ne répond pas (AdF-035), compte à rebours et annonces (AdF-036).
+- Modèles ajoutés : Tiny Face Detector (193 Ko) et 68 repères « tiny » (77 Ko), du même paquet
+  face-api 1.7.15 (MIT), chargés seulement à la première prise de vue guidée.
+- Score inchangé : régression privée 378 paires, écart max 0,000000.
+- Tests : 81 contrôles e2e publics (caméra simulée de Chromium, consignes dans 14 situations,
+  fermeture pendant le chargement, changement de caméra, prise lente ou bloquée, arrière-plan,
+  caméra refusée).
+
 ## [v2.2.0] — 2026-11-08
 
 - Ajout : lunettes de vue (AdF-028). Quand les lunettes sont confirmées dans « Vérifier les masques »,
   le trait Yeux n'est pas noté (« non mesurable : lunettes ») et la mesure des coins internes, vue à
   travers les verres, est retirée de l'écart des yeux. Mention dans le résumé et sur l'image de partage.
   Rien n'est enregistré ; les photos sans lunettes confirmées ne changent pas.
-- Si une photo a des lunettes confirmées, toutes les comparaisons (paires, héritage à 3 photos) retirent
-  les mêmes mesures, pour que les scores restent comparables ; note sous le score ; couleur des yeux
-  non notée non plus.
-- Accessibilité : contraste des valeurs dans le détail des traits et dans l'héritage (AdF-030).
 - Confidentialité : usage de l'indication « lunettes » précisé.
 - Cache hors ligne renouvelé (`air-de-famille-2.2`).
-- Score inchangé par défaut : régression privée 378 paires, écart max 0,000000. Photos de test de David
-  avec et sans lunettes : 82 % → 85 % (écart des yeux 60 % → 78 %).
-- Tests : 56 contrôles e2e publics.
+- Score inchangé par défaut : régression privée 378 paires, écart max 0,000000.
 
 ## [v2.1.0] — 2026-11-08
 

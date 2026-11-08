@@ -345,7 +345,7 @@
   }
   function sampleColors(c, P) {
     const ctx = ctx2d(c);
-    const avg = (ids) => {
+    const avg2 = (ids) => {
       let x = 0, y = 0;
       ids.forEach((i) => {
         x += P[i][0];
@@ -379,7 +379,7 @@
       [1, 2, 31, 41],
       [15, 14, 35, 46]
     ]) {
-      const [x, y] = avg(ids), rr = iod * 0.11;
+      const [x, y] = avg2(ids), rr = iod * 0.11;
       skinPx = skinPx.concat(pixelsIn(ctx, x - rr, y - rr, x + rr, y + rr, (px, py) => (px - x) ** 2 + (py - y) ** 2 <= rr * rr));
     }
     const skin = skinPx.length >= 30 ? summarize(band(skinPx, 0.15, 0.85), gain) : null;
@@ -781,14 +781,14 @@
     let dets = await detectAll(canvas);
     if (!dets.length) return { work: canvas, faces: [] };
     dets.sort((a, b) => b.detection.box.area - a.detection.box.area);
-    let work = exposeFace(canvas, dets[0].detection.box);
-    if (work !== canvas) {
+    let work2 = exposeFace(canvas, dets[0].detection.box);
+    if (work2 !== canvas) {
       await onStep?.("light");
-      const d2 = await detectAll(work);
+      const d2 = await detectAll(work2);
       if (d2.length) dets = d2.sort((a, b) => b.detection.box.area - a.detection.box.area);
-      else work = canvas;
+      else work2 = canvas;
     }
-    return { work, faces: dets.slice(0, 8) };
+    return { work: work2, faces: dets.slice(0, 8) };
   }
   async function describeVideo(frames) {
     const cand = [];
@@ -1085,7 +1085,7 @@
   var puberty = (a) => clamp((a - 12) / 6, 0, 1);
   function agedShape(N, from, to, sex, P, w) {
     const C = [0, -0.5], k1 = kGrowth(from), k2 = kGrowth(to);
-    let T = N.map(([x, y]) => {
+    let T2 = N.map(([x, y]) => {
       const dx = x - C[0], dy = y - C[1], R = Math.hypot(dx, dy);
       if (R < 1e-6) return [x, y];
       const c = -dy / R, f = (1 + k2 * (1 - c)) / (1 + k1 * (1 - c));
@@ -1094,7 +1094,7 @@
     const ds = sag(to) - sag(from);
     if (ds) {
       const mv = (ids, dx, dy) => ids.forEach((i) => {
-        T[i] = [T[i][0] + Math.sign(T[i][0]) * dx * ds, T[i][1] + dy * ds];
+        T2[i] = [T2[i][0] + Math.sign(T2[i][0]) * dx * ds, T2[i][1] + dy * ds];
       });
       mv([3, 4, 5, 11, 12, 13], 0.035, 0.09);
       mv([6, 7, 8, 9, 10], 0, 0.07);
@@ -1108,14 +1108,14 @@
     const dp = puberty(to) - puberty(from);
     if (dp && sex === "m") {
       [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].forEach((i) => {
-        T[i] = [T[i][0] * (1 + 0.05 * dp), T[i][1] + (i >= 6 && i <= 10 ? 0.04 * dp : 0)];
+        T2[i] = [T2[i][0] * (1 + 0.05 * dp), T2[i][1] + (i >= 6 && i <= 10 ? 0.04 * dp : 0)];
       });
       [27, 28, 29, 30].forEach((i) => {
-        T[i] = [T[i][0], T[i][1] + 0.01 * dp];
+        T2[i] = [T2[i][0], T2[i][1] + 0.01 * dp];
       });
     }
-    if (P && w > 0) T = T.map((p, i) => [p[0] * (1 - w) + P[i][0] * w, p[1] * (1 - w) + P[i][1] * w]);
-    return T;
+    if (P && w > 0) T2 = T2.map((p, i) => [p[0] * (1 - w) + P[i][0] * w, p[1] * (1 - w) + P[i][1] * w]);
+    return T2;
   }
   function delaunay(P) {
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -1195,10 +1195,10 @@
     const det = src.det, from = src.age ?? det.age;
     const head = src.head || headCanvas(src, bg);
     const P = model ? model.norm : null;
-    const T = agedShape(det.norm, from, to, sex, P, P && to >= 14 ? w : 0);
-    const out = warp(head, det.norm.concat(ANCHORS).map(toPx), T.concat(ANCHORS).map(toPx));
-    retouch(out, T.map(toPx), from, to);
-    return { head, out, from, to, shape: T };
+    const T2 = agedShape(det.norm, from, to, sex, P, P && to >= 14 ? w : 0);
+    const out = warp(head, det.norm.concat(ANCHORS).map(toPx), T2.concat(ANCHORS).map(toPx));
+    retouch(out, T2.map(toPx), from, to);
+    return { head, out, from, to, shape: T2 };
   }
   function retouch(out, TP, from, to) {
     const W = out.width, H = out.height, g = out.getContext("2d", { willReadFrequently: true });
@@ -1399,6 +1399,136 @@
     return c;
   }
 
+  // src/js/engine/guide.js
+  var GUIDE = { minLight: 60, backlight: 0.6, minSize: 0.3, maxSize: 0.62, maxOffX: 0.12, maxOffY: 0.14, maxYaw: 0.07, pitchLo: 0.38, pitchHi: 0.68, maxRoll: 8 };
+  function guide(m, mode2 = "self") {
+    const G = GUIDE, self = mode2 === "self";
+    if (!m || !m.face) return { key: "noface", ok: false, score: 0 };
+    const checks = [];
+    if (m.light != null && m.light < G.minLight) checks.push(self ? "dark" : "darkOther");
+    else if (m.light != null && m.around != null && m.light < m.around * G.backlight) checks.push(self ? "backlight" : "backlightOther");
+    if (m.size < G.minSize) checks.push("closer");
+    else if (m.size > G.maxSize) checks.push("farther");
+    if (Math.abs(m.cx) > G.maxOffX) checks.push(self ? m.cx > 0 ? "phoneLeft" : "phoneRight" : m.cx > 0 ? "aimRight" : "aimLeft");
+    if (Math.abs(m.cy) > G.maxOffY) checks.push(m.cy > 0 ? "phoneDown" : "phoneUp");
+    if (Math.abs(m.yaw) > G.maxYaw) checks.push(self ? m.yaw > 0 ? "headRight" : "headLeft" : "lookOther");
+    else if (m.pitch < G.pitchLo) checks.push(self ? "chinDown" : "lookOther");
+    else if (m.pitch > G.pitchHi) checks.push(self ? "chinUp" : "lookOther");
+    else if (Math.abs(m.roll) > G.maxRoll) checks.push(self ? m.roll > 0 ? "rollRight" : "rollLeft" : "lookOther");
+    const total = 5;
+    return checks.length ? { key: checks[0], ok: false, score: Math.max(0, (total - checks.length) / total) } : { key: "ok", ok: true, score: 1 };
+  }
+  var PHRASES = {
+    fr: {
+      noface: "Je ne vois pas de visage. Tenez le téléphone devant le visage, à hauteur des yeux.",
+      dark: "Trop sombre. Tournez-vous vers une fenêtre ou une lampe.",
+      darkOther: "Trop sombre : placez la personne face à une fenêtre ou une lampe.",
+      backlight: "Trop de lumière derrière vous. Tournez-vous face à la lumière.",
+      backlightOther: "Contre-jour : placez la personne face à la lumière.",
+      closer: "Rapprochez le téléphone.",
+      farther: "Éloignez le téléphone.",
+      phoneLeft: "Déplacez le téléphone vers votre gauche.",
+      phoneRight: "Déplacez le téléphone vers votre droite.",
+      aimLeft: "Visez un peu plus à gauche.",
+      aimRight: "Visez un peu plus à droite.",
+      phoneUp: "Montez le téléphone.",
+      phoneDown: "Baissez le téléphone.",
+      headLeft: "Tournez légèrement la tête vers votre gauche.",
+      headRight: "Tournez légèrement la tête vers votre droite.",
+      chinDown: "Baissez légèrement le menton.",
+      chinUp: "Relevez légèrement le menton.",
+      rollLeft: "Redressez la tête : penchez-la un peu vers votre épaule gauche.",
+      rollRight: "Redressez la tête : penchez-la un peu vers votre épaule droite.",
+      lookOther: "Demandez à la personne de regarder l'objectif, la tête droite.",
+      ok: "Parfait. Ne bougez plus.",
+      shot: "Photo prise.",
+      nocam: "Caméra indisponible. Vous pouvez choisir une photo à la place."
+    },
+    en: {
+      noface: "I can't see a face. Hold the phone in front of the face, at eye level.",
+      dark: "Too dark. Turn towards a window or a lamp.",
+      darkOther: "Too dark: place the person facing a window or a lamp.",
+      backlight: "Too much light behind you. Turn to face the light.",
+      backlightOther: "Backlit: place the person facing the light.",
+      closer: "Move the phone closer.",
+      farther: "Move the phone away.",
+      phoneLeft: "Move the phone to your left.",
+      phoneRight: "Move the phone to your right.",
+      aimLeft: "Aim a little more to the left.",
+      aimRight: "Aim a little more to the right.",
+      phoneUp: "Raise the phone.",
+      phoneDown: "Lower the phone.",
+      headLeft: "Turn your head slightly to your left.",
+      headRight: "Turn your head slightly to your right.",
+      chinDown: "Lower your chin slightly.",
+      chinUp: "Raise your chin slightly.",
+      rollLeft: "Straighten your head: tilt it slightly towards your left shoulder.",
+      rollRight: "Straighten your head: tilt it slightly towards your right shoulder.",
+      lookOther: "Ask the person to look at the lens, head straight.",
+      ok: "Perfect. Hold still.",
+      shot: "Photo taken.",
+      nocam: "Camera unavailable. You can choose a photo instead."
+    }
+  };
+
+  // src/js/engine/live.js
+  var LIVE_URL = "model";
+  var liveReady = null;
+  function loadLive(url = LIVE_URL) {
+    liveReady ??= Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(url), faceapi.nets.faceLandmark68TinyNet.loadFromUri(url)]).catch((e) => {
+      liveReady = null;
+      throw e;
+    });
+    return liveReady;
+  }
+  async function detectLive(input) {
+    const r = await faceapi.detectSingleFace(input, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 })).withFaceLandmarks(true);
+    if (!r) return null;
+    const b = r.detection.box;
+    return { box: { x: b.x, y: b.y, width: b.width, height: b.height }, score: r.detection.score, pts: r.landmarks.positions.map((p) => [p.x, p.y]) };
+  }
+  function lumStats(img, box = null, scale = 1) {
+    const { data, width: w, height: h } = img;
+    let all = 0, face = 0, nf = 0;
+    const x0 = box ? Math.max(0, Math.floor(box.x * scale)) : 0, y0 = box ? Math.max(0, Math.floor(box.y * scale)) : 0;
+    const x1 = box ? Math.min(w, Math.ceil((box.x + box.width) * scale)) : 0, y1 = box ? Math.min(h, Math.ceil((box.y + box.height) * scale)) : 0;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4, l = lumOf([data[i], data[i + 1], data[i + 2]]);
+        all += l;
+        if (box && x >= x0 && x < x1 && y >= y0 && y < y1) {
+          face += l;
+          nf++;
+        }
+      }
+    const n = w * h, rest = n - nf;
+    return { all: all / n, face: nf ? face / nf : null, around: rest ? (all - face) / rest : null };
+  }
+  var avg = (P, a, b) => {
+    let x = 0, y = 0;
+    for (let i = a; i <= b; i++) {
+      x += P[i][0];
+      y += P[i][1];
+    }
+    return [x / (b - a + 1), y / (b - a + 1)];
+  };
+  function liveMeasure(d, W, H, lum = null) {
+    if (!d) return { face: false, light: lum?.all ?? null };
+    const P = d.pts, b = d.box;
+    const L = avg(P, 36, 41), R = avg(P, 42, 47), eyeY = (L[1] + R[1]) / 2, mouthY = (P[51][1] + P[57][1]) / 2;
+    return {
+      face: true,
+      cx: (b.x + b.width / 2) / W - 0.5,
+      cy: (b.y + b.height / 2) / H - 0.5,
+      size: b.width / Math.min(W, H),
+      yaw: (P[30][0] - P[0][0]) / (P[16][0] - P[0][0] || 1) - 0.5,
+      pitch: (P[30][1] - eyeY) / (mouthY - eyeY || 1),
+      roll: Math.atan2(R[1] - L[1], R[0] - L[0]) * 180 / Math.PI,
+      light: lum?.face ?? null,
+      around: lum?.around ?? null
+    };
+  }
+
   // src/js/ui/common.js
   var handlers = {};
   var on = (ev, fn) => (handlers[ev] || (handlers[ev] = /* @__PURE__ */ new Set())).add(fn);
@@ -1486,6 +1616,323 @@
     return sel.value;
   }
 
+  // src/js/ui/capture.js
+  var cam = { session: 0, stream: null, timer: null, mode: "self", lang: "fr", voice: true, beeps: true, target: null, guided: false, last: "", lastSaid: 0, pending: "", pendingN: 0, okSince: 0, prev: null, audio: null, beepAt: 0, count: 0, shooting: false, openTok: 0, openBusy: 0, nofaceSince: 0, bad: 0 };
+  var T = (k) => (PHRASES[cam.lang] || PHRASES.fr)[k] || k;
+  var canSpeak = () => "speechSynthesis" in window;
+  var alive = (sess) => sess === cam.session && !$("#camSheet").hidden;
+  function say(text, force = false, queue = false) {
+    $("#camText").textContent = text;
+    const now = performance.now();
+    if (!force && text === cam.last && now - cam.lastSaid < 4e3) return;
+    if (!force && cam.voice && canSpeak() && speechSynthesis.speaking && now - cam.lastSaid < 4e3) return;
+    cam.last = text;
+    cam.lastSaid = now;
+    if (!cam.voice || !canSpeak()) {
+      $("#camSay").textContent = text;
+      return;
+    }
+    if (!queue) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = cam.lang === "en" ? "en-US" : "fr-FR";
+    const v = speechSynthesis.getVoices().find((x) => x.lang?.toLowerCase().startsWith(cam.lang));
+    if (v) u.voice = v;
+    u.rate = 1.05;
+    speechSynthesis.speak(u);
+  }
+  function beep(freq = 880, ms = 70, vol = 0.08) {
+    if (!cam.beeps) return;
+    try {
+      cam.audio ??= new (window.AudioContext || window.webkitAudioContext)();
+      const a = cam.audio;
+      if (a.state === "suspended") a.resume();
+      const o = a.createOscillator(), g = a.createGain();
+      o.frequency.value = freq;
+      g.gain.value = vol;
+      o.connect(g).connect(a.destination);
+      o.start();
+      o.stop(a.currentTime + ms / 1e3);
+    } catch {
+    }
+  }
+  var buzz = (p) => {
+    try {
+      navigator.vibrate?.(p);
+    } catch {
+    }
+  };
+  function initCapture() {
+    $("#camGo").addEventListener("click", startLive);
+    $("#camConsent").addEventListener("change", () => $("#camGo").disabled = !$("#camConsent").checked);
+    $("#camVoice").addEventListener("click", () => {
+      cam.voice = !cam.voice;
+      $("#camVoice").setAttribute("aria-pressed", String(cam.voice));
+      $("#camVoice").textContent = cam.voice ? "Voix : activée" : "Voix : coupée";
+      $("#camSay").textContent = cam.voice ? "" : $("#camText").textContent;
+      if (!cam.voice && canSpeak()) speechSynthesis.cancel();
+    });
+    $("#camBeeps").addEventListener("click", () => {
+      cam.beeps = !cam.beeps;
+      $("#camBeeps").setAttribute("aria-pressed", String(cam.beeps));
+      $("#camBeeps").textContent = cam.beeps ? "Bips : activés" : "Bips : coupés";
+    });
+    $("#camFlip").addEventListener("click", () => {
+      cam.mode = cam.mode === "self" ? "other" : "self";
+      openStream(cam.session);
+    });
+    $("#camShot").addEventListener("click", () => shoot(cam.session));
+    for (const b of [$("#camFile"), $("#camFile2")])
+      b.addEventListener("click", () => {
+        const t = cam.target;
+        closeDialog();
+        t?.pickFile?.();
+      });
+    $("#camResume").addEventListener("click", () => openStream(cam.session));
+    document.addEventListener("visibilitychange", () => {
+      if ($("#camSheet").hidden || $("#camLive").hidden) return;
+      if (document.hidden) {
+        if (cam.stream || cam.openBusy) pause();
+      } else if (!$("#camPaused").hidden) {
+        $("#camResume").focus();
+        say(cam.lang === "fr" ? "Caméra arrêtée. Touchez « Reprendre la caméra »." : "Camera stopped. Tap “Resume the camera”.", true);
+      }
+    });
+  }
+  function pause() {
+    cam.openTok++;
+    stopStream();
+    $("#camPaused").hidden = false;
+    $("#camNoCam").hidden = true;
+    $("#camShot").disabled = true;
+  }
+  function openCapture(target2) {
+    cam.session++;
+    cam.target = target2;
+    cam.lang = (navigator.language || "fr").toLowerCase().startsWith("fr") ? "fr" : "en";
+    $("#camLang").value = cam.lang;
+    $("#camIntro").hidden = false;
+    $("#camLive").hidden = true;
+    $("#camConsent").checked = false;
+    $("#camGo").disabled = true;
+    $("#camWho").textContent = target2.name ? ` (${target2.name})` : "";
+    Object.assign(cam, { last: "", lastSaid: 0, pending: "", pendingN: 0, count: 0, okSince: 0, bad: 0, shooting: false });
+    $("#camSay").textContent = "";
+    $("#camPaused").hidden = true;
+    $("#camNoCam").hidden = true;
+    openDialog($("#camSheet"), stopCam);
+  }
+  async function startLive() {
+    const sess = cam.session;
+    cam.mode = $("input[name=camMode]:checked").value;
+    cam.lang = $("#camLang").value;
+    $("#camIntro").hidden = true;
+    $("#camLive").hidden = false;
+    $("#camShot").disabled = true;
+    $("#camText").textContent = cam.lang === "fr" ? "Préparation de la caméra…" : "Starting the camera…";
+    $("#camText").focus();
+    say($("#camText").textContent, true);
+    for (let i = 0; !window.faceapi && i < 150 && alive(sess); i++) await new Promise((r) => setTimeout(r, 100));
+    let guided = !!window.faceapi;
+    if (guided) {
+      try {
+        while (!engine.ready && !engine.failed && alive(sess)) await new Promise((r) => setTimeout(r, 150));
+        if (engine.failed) throw new Error("moteur indisponible");
+        await loadLive();
+      } catch (e) {
+        console.error(e);
+        guided = false;
+      }
+    }
+    if (!alive(sess)) return;
+    cam.guided = guided;
+    if (document.hidden) return pause();
+    await openStream(sess);
+  }
+  async function openStream(sess) {
+    if (!alive(sess)) return;
+    const tok = ++cam.openTok;
+    cam.openBusy = tok;
+    stopStream();
+    const v = $("#camVideo");
+    v.classList.toggle("mirror", cam.mode === "self");
+    $("#camFlip").textContent = cam.mode === "self" ? "Caméra arrière (un proche photographie)" : "Caméra avant (se photographier)";
+    $("#camPaused").hidden = true;
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cam.mode === "self" ? "user" : "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    } catch (e) {
+      console.warn(e);
+    }
+    if (cam.openBusy === tok) cam.openBusy = 0;
+    if (!alive(sess) || tok !== cam.openTok || document.hidden) {
+      stream?.getTracks().forEach((t) => t.stop());
+      if (alive(sess) && tok === cam.openTok) pause();
+      return;
+    }
+    if (!stream) {
+      $("#camNoCam").hidden = false;
+      $("#camShot").disabled = true;
+      say(T("nocam"), true);
+      return;
+    }
+    stopStream();
+    cam.stream = stream;
+    $("#camNoCam").hidden = true;
+    $("#camShot").disabled = false;
+    v.srcObject = stream;
+    await v.play().catch(() => {
+    });
+    Object.assign(cam, { okSince: 0, prev: null, count: 0, pending: "", pendingN: 0, nofaceSince: 0, shooting: false, bad: 0 });
+    if (!cam.guided) {
+      say(cam.lang === "fr" ? "Guidage indisponible : cadrez le visage puis touchez « Prendre la photo »." : "Guidance unavailable: frame the face, then tap “Take the photo”.", true);
+      return;
+    }
+    loop(sess, stream);
+  }
+  var work = null;
+  async function loop(sess, stream) {
+    if (!alive(sess) || cam.stream !== stream) return;
+    const v = $("#camVideo"), t0 = performance.now();
+    if (v.readyState >= 2 && v.videoWidth && !cam.shooting) {
+      try {
+        const W = 320, H = Math.round(320 * v.videoHeight / v.videoWidth);
+        work ??= makeCanvas(W, H);
+        if (work.height !== H) work.height = H;
+        const g = work.getContext("2d", { willReadFrequently: true });
+        g.drawImage(v, 0, 0, W, H);
+        const d = await detectLive(work);
+        if (!alive(sess) || cam.stream !== stream) return;
+        const sw = 64, sh = Math.round(64 * H / W);
+        const lum = lumStats(scaled(g, W, H, sw, sh), d?.box, sw / W);
+        step(liveMeasure(d, W, H, lum), sess);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (!alive(sess) || cam.stream !== stream) return;
+    const spent = performance.now() - t0;
+    cam.timer = setTimeout(() => loop(sess, stream), Math.max(83 - spent, spent * 0.5, 30));
+  }
+  var tiny = null;
+  function scaled(g, W, H, sw, sh) {
+    tiny ??= makeCanvas(sw, sh);
+    if (tiny.height !== sh) tiny.height = sh;
+    const t = tiny.getContext("2d", { willReadFrequently: true });
+    t.drawImage(g.canvas, 0, 0, W, H, 0, 0, sw, sh);
+    return t.getImageData(0, 0, sw, sh);
+  }
+  function step(m, sess) {
+    if (cam.shooting) return;
+    const g0 = guide(m, cam.mode), now = performance.now();
+    let g = g0;
+    if (g0.key === "noface") {
+      cam.nofaceSince ||= now;
+      if (now - cam.nofaceSince < 1e3) g = { key: cam.pending || "noface", ok: false, score: 0, wait: true };
+    } else cam.nofaceSince = 0;
+    const moved = cam.prev && m.face ? Math.hypot(m.cx - cam.prev.cx, m.cy - cam.prev.cy) > 0.03 : true;
+    cam.prev = m.face ? m : null;
+    if (!g.ok || moved) {
+      if (cam.count && ++cam.bad < 2) return;
+      cam.bad = 0;
+      $("#camFrame").classList.remove("ok");
+      if (cam.count) {
+        cam.count = 0;
+        buzz(40);
+        if (!g.wait) $("#camText").textContent = T(g.key);
+      }
+      cam.okSince = g.ok ? now : 0;
+      if (g.key === cam.pending) cam.pendingN++;
+      else {
+        cam.pending = g.key;
+        cam.pendingN = 1;
+      }
+      if (cam.pendingN >= 3 && !g.wait && !g.ok) say(T(g.key));
+      if (now - cam.beepAt > 1100 - 800 * g.score) {
+        cam.beepAt = now;
+        beep(520 + 400 * g.score);
+      }
+      return;
+    }
+    cam.bad = 0;
+    $("#camFrame").classList.add("ok");
+    if (!cam.okSince) cam.okSince = now;
+    const held = now - cam.okSince;
+    if (held >= 400 && !cam.count) {
+      cam.count = 4;
+      buzz(80);
+      say(T("ok"), true);
+    }
+    const n = held < 1200 ? 4 : Math.max(0, 3 - Math.floor((held - 1200) / 450));
+    if (cam.count && n < cam.count) {
+      cam.count = n;
+      if (n > 0) {
+        say(String(n), true, true);
+        beep(1200, 90, 0.1);
+      } else shoot(sess, true);
+    }
+  }
+  async function shoot(sess, auto = false) {
+    const v = $("#camVideo"), stream = cam.stream;
+    if (cam.shooting || !alive(sess) || !stream || v.readyState < 2 || !v.videoWidth) return;
+    cam.shooting = true;
+    let c = null;
+    const track = stream.getVideoTracks()[0];
+    try {
+      if (window.ImageCapture && track && track.readyState === "live") {
+        const blob = await Promise.race([new ImageCapture(track).takePhoto(), new Promise((_, no) => setTimeout(() => no(new Error("délai")), 2e3))]);
+        const bmp = await createImageBitmap(blob);
+        const k = Math.min(1, 2e3 / Math.max(bmp.width, bmp.height));
+        c = makeCanvas(Math.round(bmp.width * k), Math.round(bmp.height * k));
+        c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      }
+    } catch {
+      c = null;
+    }
+    if (!alive(sess) || cam.stream !== stream) {
+      cam.shooting = false;
+      return;
+    }
+    if (!c) {
+      if (!v.videoWidth) {
+        cam.shooting = false;
+        return;
+      }
+      c = makeCanvas(v.videoWidth, v.videoHeight);
+      c.getContext("2d").drawImage(v, 0, 0);
+    }
+    buzz([100, 60, 100]);
+    beep(1500, 120, 0.12);
+    const t = cam.target;
+    closeDialog();
+    if (cam.voice && canSpeak()) {
+      const u = new SpeechSynthesisUtterance(T("shot"));
+      u.lang = cam.lang === "en" ? "en-US" : "fr-FR";
+      speechSynthesis.speak(u);
+    } else toast(T("shot"));
+    t?.onShot?.(c, auto);
+  }
+  function stopStream() {
+    clearTimeout(cam.timer);
+    cam.timer = null;
+    if (cam.stream) for (const tr of cam.stream.getTracks()) tr.stop();
+    cam.stream = null;
+    const v = $("#camVideo");
+    if (v) v.srcObject = null;
+  }
+  function stopCam() {
+    cam.session++;
+    stopStream();
+    const sess = cam.session, shot = cam.shooting;
+    cam.openTok++;
+    Object.assign(cam, { count: 0, okSince: 0, shooting: false, openBusy: 0 });
+    if (canSpeak() && !shot) speechSynthesis.cancel();
+    setTimeout(() => {
+      if (cam.session === sess) cam.audio?.suspend?.().catch?.(() => {
+      });
+    }, 400);
+  }
+  var camState = () => ({ open: !!cam.stream, mode: cam.mode, guided: !!cam.guided, text: $("#camText")?.textContent || "", session: cam.session });
+
   // src/js/ui/compare.js
   var LET = ["A", "B", "C"];
   var CVAR = ["--pa", "--pb", "--pc"];
@@ -1536,13 +1983,13 @@
     s.prog.tick = setInterval(() => paintProg(s), 1e3);
     srSay(`${label} : analyse en cours.`);
   }
-  async function advance(s, step) {
+  async function advance(s, step2) {
     const p = s.prog;
-    if (!p || p.step === step) return;
+    if (!p || p.step === step2) return;
     const now = performance.now();
     if (p.step !== "wait") dur[p.step] = dur[p.step] * 0.6 + (now - p.ts) / 1e3 * 0.4;
     p.done.push(p.step);
-    p.step = step;
+    p.step = step2;
     p.ts = now;
     paintProg(s);
     await new Promise((r) => setTimeout(r, 0));
@@ -1609,7 +2056,8 @@
       $(".chips", root).addEventListener("click", (e) => {
         const act = e.target.closest("[data-act]")?.dataset.act;
         if (act === "pick") openPicker(s);
-        if (act === "retake") file.click();
+        if (act === "retake") s.source === "camera" ? startCam(s) : file.click();
+        if (act === "cam") startCam(s);
         if (act === "keep") {
           s.kept = true;
           renderSlot(s);
@@ -1688,7 +2136,7 @@
   }
   async function loadInto(s, file) {
     const gen = ++s.gen;
-    Object.assign(s, { canvas: null, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null, extras: [], fused: null, kept: false, checked: false, simulated: false });
+    Object.assign(s, { canvas: null, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null, extras: [], fused: null, kept: false, checked: false, simulated: false, source: null });
     const isVideo = file.type.startsWith("video/");
     startProg(s, `Photo ${LET[s.i]}`, isVideo ? "video" : "photo");
     renderSlot(s);
@@ -1717,16 +2165,17 @@
       }
     }
   }
-  async function putCanvas(s, canvas, { name, age = null, det = null, simulated = false } = {}) {
+  async function putCanvas(s, canvas, { name, age = null, det = null, simulated = false, photoDate = null } = {}) {
     const gen = ++s.gen;
     stopProg(s);
-    Object.assign(s, { canvas, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null, ageTyped: age != null, extras: [], fused: null, kept: false, checked: false, simulated });
+    Object.assign(s, { canvas, orig: null, work: null, faces: [], det: null, status: "loading", photoDate, ageTyped: age != null, extras: [], fused: null, kept: false, checked: false, simulated, source: null });
     if (name != null) {
       s.name = name;
       $(`#name${s.i}`).value = name;
     }
     s.realAge = age;
     $(`#age${s.i}`).value = age != null ? String(Math.round(age * 10) / 10).replace(".", ",") : "";
+    if (photoDate && age == null) autoAge(s);
     if (det) {
       s.det = { ...requalify(det, age), id: nextDetId() };
       refresh(s);
@@ -1768,9 +2217,9 @@
           s.status = "ok";
           return;
         }
-        const { work, faces } = await findFaces(s.canvas, onStep);
+        const { work: work2, faces } = await findFaces(s.canvas, onStep);
         if (gen !== s.gen) return;
-        s.work = work;
+        s.work = work2;
         s.faces = faces;
         s.faceIdx = 0;
         if (!faces.length) {
@@ -1778,7 +2227,7 @@
           s.det = null;
           return;
         }
-        const det = await describe(work, faces[0], s.canvas, onStep);
+        const det = await describe(work2, faces[0], s.canvas, onStep);
         if (gen !== s.gen) return;
         s.det = s.realAge != null ? requalify(det, s.realAge) : det;
         refresh(s);
@@ -1828,13 +2277,13 @@
       if (!det) {
         startProg(s, `Photo ajoutée à ${LET[s.i]}`);
         renderSlot(s);
-        const step = (k) => advance(s, k);
+        const step2 = (k) => advance(s, k);
         const c = await decodeImage(file);
         det = await enqueue(async () => {
           if (gen !== s.gen || eg !== s.extraGen) return null;
-          const { work, faces } = await findFaces(c, step);
+          const { work: work2, faces } = await findFaces(c, step2);
           if (!faces.length || gen !== s.gen || eg !== s.extraGen) return faces.length ? null : "noface";
-          return describe(work, faces[0], c, step);
+          return describe(work2, faces[0], c, step2);
         });
       }
     } catch (err) {
@@ -1953,6 +2402,7 @@
       media.appendChild(b);
     }
     let h = "";
+    if (s.status === "empty" || s.status === "noface" || s.status === "badfile") h += `<button type="button" class="chip act" data-act="cam" aria-label="Prise de vue guidée, photo ${LET[s.i]}">Prise de vue guidée</button>`;
     if (s.status === "ok") {
       h += s.det.frames ? `<span class="chip ok">Vidéo · ${s.det.frames} images de face</span>` : '<span class="chip ok">Visage détecté</span>';
       if (s.simulated) h += '<span class="chip warn">Image simulée</span>';
@@ -1984,12 +2434,24 @@
       ($("[data-act=check]", root) || $("[data-act=pick]", root) || $(".media", root)).focus();
     }
   }
+  function startCam(s) {
+    openCapture({
+      name: $(`#name${s.i}`)?.value.trim() || "",
+      pickFile: () => $(`#file${s.i}`).click(),
+      onShot: (c) => {
+        const typed = s.ageTyped, age = s.realAge;
+        refocus = s.i;
+        putCanvas(s, c, { name: $(`#name${s.i}`)?.value.trim() || void 0, age: typed ? age : null, photoDate: /* @__PURE__ */ new Date() });
+        s.source = "camera";
+      }
+    });
+  }
   function gateHtml(s) {
     if (s.simulated) return "";
     const g = gate(s.det);
     if (g.verdict !== "reprendre") return "";
     if (s.kept) return `<span class="chip bad">Gardée malgré : ${esc(g.redo.join(", "))}</span>`;
-    return `<div class="gatebox" role="group" aria-label="Contrôle de qualité, photo ${LET[s.i]}"><p><strong>Photo à reprendre</strong> : ${esc(g.redo.join(" ; "))}.</p><div class="gateact"><button type="button" class="btn small primary" data-act="retake">Autre photo</button><button type="button" class="btn small" data-act="keep">Garder</button></div></div>`;
+    return `<div class="gatebox" role="group" aria-label="Contrôle de qualité, photo ${LET[s.i]}"><p><strong>Photo à reprendre</strong> : ${esc(g.redo.join(" ; "))}.</p><div class="gateact"><button type="button" class="btn small primary" data-act="retake">Autre photo</button>${s.source === "camera" ? "" : '<button type="button" class="btn small" data-act="cam">Caméra guidée</button>'}<button type="button" class="btn small" data-act="keep">Garder</button></div></div>`;
   }
   function thumb(s, S) {
     const t = makeCanvas(S, S), g = t.getContext("2d"), c = s.canvas;
@@ -2413,14 +2875,14 @@
     g.strokeStyle = cssVar("--line");
     g.lineWidth = 1;
     g.globalAlpha = 0.55;
-    const step = 0.25 * k;
-    for (let v = X(0) % step; v < W; v += step) {
+    const step2 = 0.25 * k;
+    for (let v = X(0) % step2; v < W; v += step2) {
       g.beginPath();
       g.moveTo(v, 0);
       g.lineTo(v, W);
       g.stroke();
     }
-    for (let v = Y(0) % step; v < W; v += step) {
+    for (let v = Y(0) % step2; v < W; v += step2) {
       g.beginPath();
       g.moveTo(0, v);
       g.lineTo(W, v);
@@ -2524,10 +2986,10 @@
     const mentions = [];
     if (R.lens) mentions.push(["--muted", "500 28px", "Yeux non notés : lunettes confirmées"]);
     if (slots[a].simulated || slots[b].simulated) mentions.push(["--bad", "600 30px", "Contient une image simulée"]);
-    const step = Math.min(46, (H - 1030 - 90 - mentions.length * 44) / Math.max(1, main.length));
-    const bh = Math.min(22, step - 8), fs = Math.round(Math.min(32, step - 4));
+    const step2 = Math.min(46, (H - 1030 - 90 - mentions.length * 44) / Math.max(1, main.length));
+    const bh = Math.min(22, step2 - 8), fs = Math.round(Math.min(32, step2 - 4));
     main.forEach((r, n) => {
-      const y = 1035 + n * step, x0 = 330, bw = 560;
+      const y = 1035 + n * step2, x0 = 330, bw = 560;
       g.textAlign = "right";
       g.fillStyle = C("--muted");
       g.font = `500 ${fs}px "Familjen Grotesk", system-ui, sans-serif`;
@@ -2668,9 +3130,9 @@
       await enqueue(async () => {
         try {
           const [canvas, date] = await Promise.all([decodeImage(file), exifDate(file)]);
-          const { work, faces } = await findFaces(canvas);
+          const { work: work2, faces } = await findFaces(canvas);
           for (let n = 0; n < faces.length; n++) {
-            const det = await describe(work, faces[n], canvas);
+            const det = await describe(work2, faces[n], canvas);
             album.faces.push(cropEntry(canvas, det, { date: date ? date.slice(0, 7) : "", src: file.name, n: n + 1, of: faces.length }));
             found++;
           }
@@ -3188,7 +3650,7 @@
     $("#fuPlay").setAttribute("aria-pressed", "true");
     $("#fuPlay").textContent = "Arrêter";
     const t0 = performance.now();
-    const step = (now) => {
+    const step2 = (now) => {
       if (!playing) return;
       const t = 0.5 - 0.5 * Math.cos((now - t0) / 4e3 * 2 * Math.PI);
       const r = compute(t, true);
@@ -3197,9 +3659,9 @@
         stamp($("#fuCm"));
       }
       $("#fuTv").textContent = `${Math.round(t * 100)} %`;
-      playing = requestAnimationFrame(step);
+      playing = requestAnimationFrame(step2);
     };
-    playing = requestAnimationFrame(step);
+    playing = requestAnimationFrame(step2);
   }
   function stop() {
     cancelAnimationFrame(playing);
@@ -3369,6 +3831,7 @@
     buildSlots();
     initPicker();
     initMasks();
+    initCapture();
     $("#privacyBtn").addEventListener("click", () => openDialog($("#privacySheet")));
     initResults();
     initAlbum();
@@ -3381,18 +3844,18 @@
     slots.forEach(renderSlot);
     renderResults();
     const t0 = Date.now();
-    let step = "Chargement du moteur d’analyse (13 Mo, une seule fois)…";
+    let step2 = "Chargement du moteur d’analyse (13 Mo, une seule fois)…";
     const show = () => {
       if (engine.ready) return;
       const s = Math.round((Date.now() - t0) / 1e3);
       const slow = s >= 40 ? " Connexion lente : patientez, le téléchargement continue." : "";
-      $("#engineTxt").textContent = `${step} (${s} s)${slow}`;
+      $("#engineTxt").textContent = `${step2} (${s} s)${slow}`;
     };
     show();
     const tick = setInterval(show, 1e3);
     try {
       await loadEngine((text) => {
-        step = text;
+        step2 = text;
         show();
       });
       engine.ready = true;
@@ -3402,6 +3865,7 @@
       analyzeQueued();
     } catch (err) {
       clearInterval(tick);
+      engine.failed = true;
       console.error(err);
       $("#engine").className = "status err";
       $("#engineTxt").textContent = "Moteur d'analyse introuvable. Vérifiez la connexion puis rechargez la page.";
@@ -3424,6 +3888,10 @@
     putCanvas,
     addExtra,
     gate,
+    guide,
+    GUIDE,
+    camState,
+    live: { detectLive, liveMeasure, lumStats },
     moteur: { normalize, measures, symmetrize, appearance, sampleColors, quality }
   };
   boot();

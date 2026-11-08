@@ -203,7 +203,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.2</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.3</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -235,12 +235,43 @@
   </div>
 </div>
 
+<div class="sheet" id="camSheet" hidden role="dialog" aria-modal="true" aria-labelledby="camTitle">
+  <div class="sheet-in cam">
+    <div class="sheet-head"><h3 id="camTitle">Prise de vue guidée<span id="camWho"></span></h3><button type="button" class="btn" data-close>Fermer</button></div>
+    <div id="camIntro">
+      <label class="check"><input type="checkbox" id="camConsent" data-autofocus> La personne photographiée est d'accord (pour un enfant : ses parents).</label>
+      <fieldset class="cammode"><legend>Qui tient le téléphone ?</legend>
+        <label class="check"><input type="radio" name="camMode" value="self" checked> Je me prends en photo, sans lunettes si possible : je suis guidé par la voix, des bips et des vibrations</label>
+        <label class="check"><input type="radio" name="camMode" value="other"> Je photographie quelqu'un avec la caméra arrière</label>
+      </fieldset>
+      <label class="camlang">Langue des consignes <select id="camLang"><option value="fr">Français</option><option value="en">English</option></select></label>
+      <p class="hint">Avec TalkBack, coupez la voix de l'application une fois la caméra ouverte : les consignes seront lues par TalkBack. Rien n'est enregistré ni envoyé : l'image de la caméra reste sur le téléphone et la caméra s'arrête dès la fermeture. La photo se prend toute seule quand le visage est bien placé ; vous pouvez aussi la prendre vous-même.</p>
+      <div class="actions"><button type="button" class="btn primary" id="camGo" disabled>Démarrer la caméra</button></div>
+    </div>
+    <div id="camLive" hidden>
+      <div class="camview"><video id="camVideo" playsinline muted aria-hidden="true"></video><div class="camframe" id="camFrame" aria-hidden="true"></div></div>
+      <p class="camtext" id="camText" tabindex="-1"></p>
+      <div class="sr-only" id="camSay" role="status" aria-live="polite"></div>
+      <div class="camnocam" id="camNoCam" hidden><p>Caméra indisponible ou refusée.</p><button type="button" class="btn" id="camFile">Choisir une photo</button></div>
+      <div class="camnocam" id="camPaused" hidden><p>Caméra arrêtée pendant que l'application était en arrière-plan.</p><button type="button" class="btn primary" id="camResume">Reprendre la caméra</button></div>
+      <div class="camctl">
+        <button type="button" class="btn primary" id="camShot">Prendre la photo</button>
+        <button type="button" class="btn small" id="camFlip">Caméra arrière (un proche photographie)</button>
+        <button type="button" class="btn small" id="camVoice" aria-pressed="true">Voix : activée</button>
+        <button type="button" class="btn small" id="camBeeps" aria-pressed="true">Bips : activés</button>
+        <button type="button" class="btn small" id="camFile2">Choisir une photo à la place</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="sheet" id="privacySheet" hidden role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
   <div class="sheet-in prose">
     <div class="sheet-head"><h3 id="privacyTitle">Confidentialité et mentions</h3><button type="button" class="btn" data-close data-autofocus>Fermer</button></div>
     <h4>Vos photos restent sur l'appareil</h4>
     <p>Toute l'analyse se fait dans le navigateur de votre téléphone. Aucune photo, aucune vidéo et aucune empreinte de visage n'est envoyée ni conservée : tout disparaît à la fermeture de la page.</p>
     <h4>Ce qui peut être mémorisé</h4>
+    <p>La prise de vue guidée utilise la caméra du téléphone seulement pendant la prise : l'image n'est ni enregistrée ni envoyée, et la caméra s'arrête dès la fermeture de la fenêtre.</p>
     <p>Seulement si vous cochez « Mémoriser les prénoms et dates de naissance » dans l'album : prénoms et dates de naissance, sur cet appareil. Décochez la case pour les effacer. Rien d'autre n'est enregistré, et aucun compte n'existe.</p>
     <h4>Données de visage</h4>
     <p>Les mesures d'un visage sont des données biométriques. Elles sont calculées en mémoire, pour la comparaison en cours, puis effacées. Si vous confirmez des lunettes, cela sert seulement à ne pas noter les mesures des yeux vues à travers les verres : rien n'est enregistré.</p>
