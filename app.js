@@ -526,11 +526,17 @@
     const sharp = Math.sqrt(Math.max(0, s2 / n - (s1 / n) ** 2)) / Math.max(20, light) * 100;
     return { light: Math.round(light), sharp: Math.round(sharp * 10) / 10 };
   }
-  var GATE = { minWidth: 110, maxYaw: 0.12, minSharp: 4, minLight: 55, maxLight: 235 };
+  var GATE = { minWidth: 110, maxYaw: 0.12, minSharp: 4, minLight: 55, maxLight: 235, maxRough: 0.11 };
+  function contourRoughness(N) {
+    let t = 0;
+    for (let i = 1; i < 16; i++) t += Math.hypot(N[i - 1][0] - 2 * N[i][0] + N[i + 1][0], N[i - 1][1] - 2 * N[i][1] + N[i + 1][1]);
+    return t / 15;
+  }
   function gate(det) {
     const redo = [], keep = [], N = det.norm, occ = det.occ || {}, img = det.img;
     if (det.box.width < GATE.minWidth) redo.push("visage trop petit : rapprochez-vous ou recadrez");
     if (N && Math.abs((N[30][0] - N[0][0]) / (N[16][0] - N[0][0]) - 0.5) > GATE.maxYaw) redo.push("visage tourné : regardez l'objectif");
+    if (N && contourRoughness(N) > GATE.maxRough) redo.push("repères mal placés : photo floue ou bougée ?");
     if (det.warn?.includes("Yeux mi-clos")) redo.push("yeux mi-clos");
     if (occ.glasses) redo.push("lunettes : retirez-les si possible");
     if (img && img.sharp < GATE.minSharp) redo.push("photo floue");
@@ -2285,6 +2291,7 @@
       if (s.extras.length) out.push(`<li>${nm(i)} : ${s.extras.length + 1} photos combinées, chacune pondérée par sa qualité.</li>`);
       if (s.simulated) out.push(`<li class="bad">${nm(i)} : image simulée (vieillissement ou fusion), pas une vraie photo.</li>`);
     }
+    if (R.ia >= 80 && R.geo <= 25) out.push(`<li class="bad">Impression globale élevée (${Math.round(R.ia)} %) mais traits très bas (${Math.round(R.geo)} %) : les repères d'une photo sont sans doute mal placés (photo floue ou bougée ?). Vérifiez le contour superposé ou reprenez la photo.</li>`);
     const miss = [a, b].filter((i) => slots[i].realAge == null);
     if (miss.length) {
       const near = Math.abs(R.ageGap - BIG_GAP) < 8;

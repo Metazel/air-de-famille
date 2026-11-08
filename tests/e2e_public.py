@@ -229,6 +229,13 @@ with sync_playwright() as p:
     gb = page.inner_text(".slot[data-i='1'] .gatebox") if page.locator(".slot[data-i='1'] .gatebox").count() else ""
     check("Contrôle de qualité : photo floue → « à reprendre » avec la raison", "floue" in gb, " ".join(gb.split()))
     check("Contrôle de qualité : photo correcte acceptée", page.locator(".slot[data-i='0'] .gatebox").count() == 0)
+    page.evaluate("""async () => { const A = window.AirDeFamille; const z = __fakeFace(5, {age: 40, zigzag: true});
+      await A.putCanvas(A.slots[2], z.canvas, {name: 'Zoé', age: 40, det: z.det}); }""")
+    page.wait_for_timeout(300)
+    gz = page.inner_text(".slot[data-i='2'] .gatebox") if page.locator(".slot[data-i='2'] .gatebox").count() else ""
+    check("Contrôle de qualité : repères mal placés (contour irrégulier) → « à reprendre » (AdF-027)", "repères mal placés" in gz, " ".join(gz.split()))
+    page.click(".slot[data-i='2'] .x")
+    page.wait_for_timeout(200)
     for scheme in ["light", "dark"]:
         page.emulate_media(color_scheme=scheme)
         run_axe(page, f"résultats et contrôle de qualité / {scheme}")

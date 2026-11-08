@@ -11,6 +11,9 @@ Lot 1 du cadrage « prise de vue guidée et analyse » : améliorations sans cam
   visage tourné, yeux mi-clos ou lunettes → « Photo à reprendre » avec la raison, choix
   « Autre photo » ou « Garder » (une photo gardée est signalée sous le score). Seuils calibrés
   sur une banque privée, sans faux rejet sur les photos d'origine.
+- Ajout : repères mal placés détectés (contour du visage irrégulier, typique d'une photo bougée)
+  et avertissement quand l'impression globale est élevée mais les traits très bas (AdF-027,
+  constaté par un test réel).
 - Ajout : jusqu'à 3 photos par personne dans Comparer (CU4), combinées en mémoire et pondérées
   par leur qualité ; aucune photo enregistrée.
 - Ajout : fenêtre « Vérifier les masques » (CU5) : lunettes, barbe, frange et cheveux sur les côtés
@@ -27,7 +30,7 @@ Lot 1 du cadrage « prise de vue guidée et analyse » : améliorations sans cam
   de focus du champ Prénom (AdF-012).
 - Cache hors ligne renouvelé (`air-de-famille-2.1`), `app.css` ajouté.
 - Moteur : calcul du score inchangé (régression privée : 378 paires, écart max 0,000000).
-- Tests : 50 contrôles e2e publics (20 de plus), avec un visage synthétique dessiné à la volée.
+- Tests : 52 contrôles e2e publics (22 de plus), avec un visage synthétique dessiné à la volée.
 
 ## Dépôt — 2026-11-08
 

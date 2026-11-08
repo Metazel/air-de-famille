@@ -5,7 +5,7 @@ window.__fakeFace = (seed = 1, opt = {}) => {
   const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280) - 0.5;
   const j = (v, k = 3) => v + rnd() * k;
   const P = [];
-  for (let t = 0; t <= 16; t++) { const th = Math.PI * t / 16; P.push([j(200 - 80 * Math.cos(th)), j(180 + 140 * Math.sin(th))]); }
+  for (let t = 0; t <= 16; t++) { const th = Math.PI * t / 16, z = opt.zigzag ? (t % 2 ? 9 : -9) : 0; P.push([j(200 - (80 + z) * Math.cos(th)), j(180 + (140 + z) * Math.sin(th))]); }
   for (const [x0, x1] of [[135, 185], [215, 265]]) for (let k = 0; k < 5; k++) { const x = x0 + (x1 - x0) * k / 4; P.push([j(x), j(150 - 8 * Math.sin(Math.PI * k / 4))]); }
   const nx = 200 + (opt.yaw || 0);
   for (let k = 0; k < 4; k++) P.push([j(nx, 1), 160 + k * 18]);
