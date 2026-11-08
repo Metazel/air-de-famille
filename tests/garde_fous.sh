@@ -1,42 +1,95 @@
 #!/usr/bin/env bash
 # Garde-fous du dépôt public Air de famille.
-# Échoue si une photo, une banque de visages, des descripteurs, un secret
-# ou un appel vers un site externe apparaissent dans le dépôt.
+# Échoue si une photo, une banque de visages, des descripteurs, un secret,
+# un appel externe ou une CSP modifiée apparaissent dans le dépôt.
+#
+#   bash tests/garde_fous.sh                 fichiers suivis par git (défaut)
+#   bash tests/garde_fous.sh --index         fichiers indexés (hook pre-commit)
+#   bash tests/garde_fous.sh --historique R  + fichiers ajoutés dans chaque commit de R (ex. origin/main..HEAD)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 err=0
 fail() { echo "ÉCHEC : $*"; err=1; }
 
-# 1. Images : seules les icônes de l'application sont autorisées.
-autorisees='^\./(icon-192\.png|icon-512\.png|icon-maskable-512\.png)$'
-while IFS= read -r f; do
-  [[ "$f" =~ $autorisees ]] || fail "image non autorisée : $f (aucune photo réelle dans le dépôt)"
-done < <(find . -path ./.git -prune -o -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.heic' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.mp4' -o -iname '*.mov' \) -print)
+mode="${1:-}"
+if [ "$mode" = "--index" ]; then
+  mapfile -t fichiers < <(git diff --cached --name-only --diff-filter=ACMR)
+  lire() { git show ":$1"; }
+else
+  mapfile -t fichiers < <(git ls-files)
+  lire() { cat -- "$1"; }
+fi
 
-# 2. Banque familiale, descripteurs, tests privés.
-for motif in 'banque' 'bank' 'descripteur' 'descriptor' 'regression_v2' 'e2e_v2' 'eval_js' 'bank_eval'; do
-  hits=$(find . -path ./.git -prune -o -type f -iname "*${motif}*" -print)
-  [ -z "$hits" ] || fail "fichier privé détecté ($motif) : $hits"
+# Photos, vidéos et archives : seules les icônes de l'application sont autorisées.
+autorisees='^(icon-192\.png|icon-512\.png|icon-maskable-512\.png)$'
+interdites='\.(jpe?g|png|webp|heic|heif|avif|gif|bmp|tiff?|svg|mp4|mov|m4v|avi|webm|zip|7z|rar|tar|gz|tgz)$'
+verifier_nom() {
+  local f="$1" bas
+  bas=$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')
+  if [[ "$bas" =~ $interdites ]] && ! [[ "$f" =~ $autorisees ]]; then
+    fail "fichier image, vidéo ou archive non autorisé : $f (aucune photo réelle dans le dépôt)"
+  fi
+  case "$bas" in
+    *banque*|*bank*|*descripteur*|*descriptor*|tests/prive/*|dev/*) fail "fichier privé détecté : $f" ;;
+  esac
+}
+for f in "${fichiers[@]}"; do verifier_nom "$f"; done
+
+# Historique : un fichier ajouté puis supprimé dans la même demande reste public.
+if [ "$mode" = "--historique" ]; then
+  plage="${2:?plage de commits attendue, ex. origin/main..HEAD}"
+  while IFS= read -r f; do
+    [ -n "$f" ] && verifier_nom "$f"
+  done < <(git log --diff-filter=A --name-only --format= "$plage" | sort -u)
+fi
+
+# Contenu des fichiers texte (hors moteur et modèles, vérifiés par empreinte).
+for f in "${fichiers[@]}"; do
+  case "$f" in vendor/*|model/*|fonts/*.woff2|*.png|tests/empreintes.sha256) continue ;; esac
+  contenu=$(lire "$f" 2>/dev/null | tr -d '\000' || true)
+  # Image intégrée en base64.
+  if grep -qE 'data:image/[a-z+]+;base64,[A-Za-z0-9+/]{200}' <<<"$contenu"; then
+    fail "image intégrée en base64 dans $f"
+  fi
+  # Descripteur de visage sérialisé : tableau d'au moins 128 nombres décimaux.
+  if grep -qE '\[\s*(-?[0-9]*\.[0-9]+(e-?[0-9]+)?\s*,\s*){127}' <<<"$contenu"; then
+    fail "tableau de 128 nombres ou plus (descripteur de visage probable) dans $f"
+  fi
+  # Secrets.
+  if grep -qiE '(api[_-]?key|secret|token|password|passwd)\s*[:=]\s*["'"'"']?[A-Za-z0-9_\-]{16,}' <<<"$contenu" \
+     || grep -qE '(^|[^A-Za-z0-9_-])(ghp_|github_pat_|AKIA|AIza|sk-)[A-Za-z0-9_]{16,}' <<<"$contenu"; then
+    fail "secret probable dans $f"
+  fi
 done
-if grep -rIlE '"descriptor"\s*:\s*\[' --exclude-dir=.git --exclude-dir=model --exclude-dir=vendor . >/dev/null 2>&1; then
-  fail "descripteurs de visage sérialisés détectés"
+
+# Confidentialité by design : aucune adresse externe dans le code de l'application.
+for f in index.html app.js sw.js manifest.webmanifest fonts/fonts.css; do
+  if [ -f "$f" ] && grep -qE 'https?://' "$f"; then
+    fail "adresse externe dans $f : l'application ne doit appeler aucun autre site"
+  fi
+done
+
+# CSP : comparée directive par directive à la politique attendue.
+attendue="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+normaliser() { tr ';' '\n' | sed -E 's/^ +//; s/ +$//; s/ +/ /g' | grep -v '^$' | sort; }
+publiee=$(grep -oE 'http-equiv="Content-Security-Policy" content="[^"]*"' index.html | sed -E 's/.*content="([^"]*)"/\1/' || true)
+if [ -z "$publiee" ]; then
+  fail "CSP absente de index.html"
+elif [ "$(normaliser <<<"$publiee")" != "$(normaliser <<<"$attendue")" ]; then
+  fail "CSP modifiée. Attendue : $attendue — trouvée : $publiee"
 fi
 
-# 3. Secrets.
-if grep -rIniE '(api[_-]?key|secret|token|password)\s*[:=]\s*["'"'"'][A-Za-z0-9_\-]{12,}' --exclude-dir=.git --exclude-dir=vendor --exclude-dir=tests . ; then
-  fail "secret probable détecté"
+# Moteur, modèles, polices et icônes : empreintes SHA-256 attendues.
+if [ "$mode" != "--index" ]; then
+  if ! sha256sum --quiet -c tests/empreintes.sha256; then
+    fail "moteur, modèle, police ou icône modifié : mettre à jour tests/empreintes.sha256 avec justification"
+  fi
 fi
 
-# 4. Confidentialité by design : CSP présente et aucun site externe appelé.
-grep -q "connect-src 'self'" index.html || fail "CSP connect-src 'self' absente de index.html"
-grep -q "default-src 'self'" index.html || fail "CSP default-src 'self' absente de index.html"
-if grep -oE "(fetch|loadScript|importScripts)\([^)]*https?://" app.js sw.js; then
-  fail "appel réseau vers un site externe dans le code"
-fi
-
-# 5. Taille : pas de fichier inattendu de plus de 8 Mo.
-big=$(find . -path ./.git -prune -o -type f -size +8M -print)
-[ -z "$big" ] || fail "fichier de plus de 8 Mo : $big"
+# Taille : pas de fichier inattendu de plus de 8 Mo.
+for f in "${fichiers[@]}"; do
+  [ -f "$f" ] && [ "$(stat -c %s "$f")" -gt 8388608 ] && fail "fichier de plus de 8 Mo : $f"
+done
 
 [ $err -eq 0 ] && echo "Garde-fous : OK"
 exit $err

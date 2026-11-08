@@ -6,15 +6,14 @@
 *.webp
 *.mp4
 *.mov
+*.avif
+*.heif
+*.zip
 banque*/
 bank*/
 photos/
 dev/
 tests/prive/
-tests/regression_v2.py
-tests/e2e_v2.py
-tests/eval_js.py
-tests/bank_eval.py
 *.descripteurs.json
 
 # Outils et résultats de test
