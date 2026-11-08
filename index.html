@@ -203,7 +203,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.1</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.2</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -230,7 +230,7 @@
     <div class="sheet-head"><h3 id="maskTitle">Ce qui masque le visage</h3><button type="button" class="btn" data-close>Fermer</button></div>
     <p class="hint"><span id="maskWho"></span>. Cochez ce qui est présent sur la photo : le trait concerné compte moins dans le score, au lieu d'être noté faussement. Les cases cochées d'office ont été détectées.</p>
     <div class="masklist" id="maskList"></div>
-    <p class="hint">Lunettes : si possible, reprenez la photo sans elles. Barbe et cheveux ne s'enlèvent pas : ils sont simplement pris en compte.</p>
+    <p class="hint">Lunettes : si possible, reprenez la photo sans elles. Si vous les gardez, les yeux ne sont pas notés, car les verres changent leur taille apparente. Barbe et cheveux ne s'enlèvent pas : ils sont simplement pris en compte.</p>
     <div class="actions"><button type="button" class="btn primary" id="maskGo" data-autofocus>Appliquer</button></div>
   </div>
 </div>
@@ -243,7 +243,7 @@
     <h4>Ce qui peut être mémorisé</h4>
     <p>Seulement si vous cochez « Mémoriser les prénoms et dates de naissance » dans l'album : prénoms et dates de naissance, sur cet appareil. Décochez la case pour les effacer. Rien d'autre n'est enregistré, et aucun compte n'existe.</p>
     <h4>Données de visage</h4>
-    <p>Les mesures d'un visage sont des données biométriques. Elles sont calculées en mémoire, pour la comparaison en cours, puis effacées.</p>
+    <p>Les mesures d'un visage sont des données biométriques. Elles sont calculées en mémoire, pour la comparaison en cours, puis effacées. Si vous confirmez des lunettes, cela sert seulement à ne pas noter les mesures des yeux vues à travers les verres : rien n'est enregistré.</p>
     <h4>Les personnes photographiées</h4>
     <p>Demandez leur accord avant d'analyser leur photo. Pour un enfant, l'accord de ses parents est nécessaire : chacun a droit à son image, les mineurs y compris (Code civil, art. 9 et 372-1). Ne partagez pas un résultat sans l'accord des personnes concernées.</p>
     <h4>Ce que dit le score</h4>
