@@ -538,7 +538,7 @@
     if (N && Math.abs((N[30][0] - N[0][0]) / (N[16][0] - N[0][0]) - 0.5) > GATE.maxYaw) redo.push("visage tourné : regardez l'objectif");
     if (N && contourRoughness(N) > GATE.maxRough) redo.push("repères mal placés : photo floue ou bougée ?");
     if (det.warn?.includes("Yeux mi-clos")) redo.push("yeux mi-clos");
-    if (occ.glasses) redo.push("lunettes : retirez-les si possible");
+    if (occ.glasses) redo.push("lunettes : retirez-les si possible (les verres changent la taille apparente des yeux)");
     if (img && img.sharp < GATE.minSharp) redo.push("photo floue");
     if (img && img.light < GATE.minLight) redo.push("visage trop sombre");
     if (img && img.light > GATE.maxLight) redo.push("visage surexposé");
