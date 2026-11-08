@@ -24,6 +24,11 @@ tant qu'elle reste ouverte.
 
 ## Contrôles automatiques
 
-À chaque proposition de changement, `tests/garde_fous.sh` bloque toute photo,
-banque de visages, descripteur, secret ou appel externe, puis `tests/e2e_public.py`
-vérifie la CSP, l'absence de requête externe, l'accessibilité et le mode hors ligne.
+- Avant chaque commit (`git config core.hooksPath .githooks`) : `tests/garde_fous.sh --index`
+  refuse photo, banque de visages, descripteur ou secret.
+- À chaque demande de fusion : les garde-fous portent sur l'état final et sur chaque commit
+  (un fichier ajouté puis retiré resterait public), vérifient la CSP à l'identique et les
+  empreintes du moteur et des modèles ; `tests/e2e_public.py` vérifie l'absence de requête
+  externe, les violations de CSP, l'accessibilité et le mode hors ligne.
+- Ces contrôles ne bloquent la publication que si `main` est protégée dans les réglages
+  du dépôt (demande de fusion obligatoire, contrôle « controles » au vert).
