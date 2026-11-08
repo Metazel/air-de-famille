@@ -84,6 +84,16 @@ def serve():
 AXE_SRC = open(AXE).read()
 
 
+def attendre(pg, expr, timeout=20000):
+    """Attente sans eval (la CSP stricte interdit wait_for_function avec une chaîne)."""
+    t0 = time.time()
+    while time.time() - t0 < timeout / 1000:
+        if pg.evaluate(f"() => !!({expr})"):
+            return True
+        pg.wait_for_timeout(150)
+    raise TimeoutError(expr)
+
+
 def run_axe(page, label):
     if not page.evaluate("!!window.axe"):
         page.evaluate(AXE_SRC + ";0")
@@ -106,8 +116,10 @@ ORIGINE = urlparse(base).netloc
 def externe(url):
     return not url.startswith(("data:", "blob:")) and urlparse(url).netloc != ORIGINE
 with sync_playwright() as p:
-    b = p.chromium.launch(executable_path=CHROME, args=["--no-sandbox", "--ignore-certificate-errors"])
+    b = p.chromium.launch(executable_path=CHROME, args=["--no-sandbox", "--ignore-certificate-errors",
+                          "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
     ctx = b.new_context(ignore_https_errors=True, viewport={"width": 360, "height": 800}, device_scale_factor=2, is_mobile=True, has_touch=True, locale="fr-FR")
+    ctx.grant_permissions(["camera"])
     page = ctx.new_page()
     errors, external, steps = [], [], []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -217,6 +229,18 @@ with sync_playwright() as p:
     check("Analyse : annulation annoncée (zone de messages lue par le lecteur d'écran)", "annulée" in srs, " ".join(srs.split())[:80])
     check("Analyse : le focus reste dans l'emplacement après annulation", page.evaluate("!!document.activeElement.closest('.slot')"), page.evaluate("document.activeElement.className"))
 
+    # Caméra refusée : repli sur l'import de photo
+    pd = ctx.new_page()
+    pd.add_init_script("navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('refus', 'NotAllowedError'))")
+    pd.goto(base, wait_until="load")
+    attendre(pd, "window.AirDeFamille && AirDeFamille.engine.ready", 120000)
+    pd.click(".slot[data-i='0'] [data-act=cam]")
+    pd.check("#camConsent")
+    pd.click("#camGo")
+    pd.wait_for_selector("#camNoCam:not([hidden])", timeout=20000)
+    check("Caméra refusée : message et choix d'une photo proposés", pd.is_visible("#camFile") and "indisponible" in pd.inner_text("#camText").lower())
+    pd.close()
+
     # Lot 1 avec visages synthétiques
     page.evaluate(FAKE)
     page.evaluate("""async () => { const A = window.AirDeFamille;
@@ -298,6 +322,137 @@ with sync_playwright() as p:
     page.click("#tab-comparer")
     for i in (1, 0):
         page.click(f".slot[data-i='{i}'] .x")
+    page.wait_for_timeout(200)
+
+    # Prise de vue guidée (lot 2, CU1 et CU2) : choix de la consigne (fonction pure)
+    cas = [
+        ("aucun visage", {"face": False}, "self", "noface"),
+        ("trop sombre", {"face": True, "light": 30, "around": 40, "size": 0.2, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 0}, "self", "dark"),
+        ("contre-jour", {"face": True, "light": 80, "around": 200, "size": 0.4, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 0}, "self", "backlight"),
+        ("trop loin", {"face": True, "light": 120, "around": 120, "size": 0.2, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 0}, "self", "closer"),
+        ("trop près", {"face": True, "light": 120, "around": 120, "size": 0.8, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 0}, "self", "farther"),
+        ("décalé, caméra avant", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0.2, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 0}, "self", "phoneLeft"),
+        ("décalé, caméra arrière", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0.2, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 0}, "other", "aimRight"),
+        ("trop bas dans l'image", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0, "cy": 0.2, "yaw": 0, "pitch": 0.5, "roll": 0}, "self", "phoneDown"),
+        ("tête tournée", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0, "cy": 0, "yaw": 0.12, "pitch": 0.5, "roll": 0}, "self", "headRight"),
+        ("menton levé", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.3, "roll": 0}, "self", "chinDown"),
+        ("menton baissé", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.8, "roll": 0}, "self", "chinUp"),
+        ("tête penchée", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": 15}, "self", "rollRight"),
+        ("tête penchée de l'autre côté", {"face": True, "light": 120, "around": 120, "size": 0.4, "cx": 0, "cy": 0, "yaw": 0, "pitch": 0.5, "roll": -15}, "self", "rollLeft"),
+        ("bien placé", {"face": True, "light": 120, "around": 120, "size": 0.45, "cx": 0.02, "cy": -0.03, "yaw": 0.01, "pitch": 0.52, "roll": 2}, "self", "ok"),
+    ]
+    rate = [(n, page.evaluate("([m, mode]) => AirDeFamille.guide(m, mode).key", [m, mode]), k) for n, m, mode, k in cas]
+    check("Guidage : une consigne juste dans 14 situations, lumière d'abord, sens de la tête penchée", all(g == k for _, g, k in rate), [r for r in rate if r[1] != r[2]])
+    # Mesure de lumière en portrait (AdF-033) : image réduite 64 × 114, cadre du visage en coordonnées 320 px
+    lum = page.evaluate("""() => { const w = 64, h = 114, d = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, f = x >= 16 && x < 48 && y >= 60 && y < 100; d[i] = d[i+1] = d[i+2] = f ? 200 : 20; d[i+3] = 255; }
+      return AirDeFamille.live.lumStats(new ImageData(d, w, h), { x: 80, y: 300, width: 160, height: 200 }, 64 / 320); }""")
+    check("Guidage : lumière du visage et du fond mesurées au bon endroit en portrait (AdF-033)", abs(lum["face"] - lum["around"]) > 100 and lum["face"] > lum["around"], lum)
+    # Fermeture pendant le chargement (AdF-031) : aucune caméra rallumée ensuite
+    page.evaluate("""() => { window.__streams = []; const g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (c) => { await new Promise((r) => setTimeout(r, window.__gumDelay || 0)); const st = await g(c); window.__streams.push(st); return st; }; }""")
+    page.click(".slot[data-i='1'] [data-act=cam]")
+    page.check("#camConsent")
+    page.click("#camGo")
+    page.wait_for_timeout(150)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(4000)
+    fuite = page.evaluate("[AirDeFamille.camState().open, window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length]")
+    check("Caméra : fermée pendant le chargement du guidage, la caméra ne s'allume pas (AdF-031)", fuite == [False, 0], fuite)
+    # Parcours caméra (caméra simulée de Chromium : aucun visage, aucune image réelle)
+    page.click(".slot[data-i='1'] [data-act=cam]")
+    page.wait_for_timeout(200)
+    check("Caméra : accord demandé avant d'ouvrir la caméra (AdF-024)", page.is_visible("#camIntro") and page.is_disabled("#camGo") and not page.evaluate("AirDeFamille.camState().open"))
+    run_axe(page, "prise de vue guidée, accord")
+    page.check("#camConsent")
+    page.click("#camGo")
+    attendre(page, "AirDeFamille.camState().open && AirDeFamille.camState().text.length > 0", 20000)
+    page.wait_for_timeout(1500)
+    st = page.evaluate("AirDeFamille.camState()")
+    check("Caméra : flux ouvert, guidage actif (petits modèles chargés), consigne affichée (aucun visage dans l'image simulée)", st["open"] and st["guided"] and "visage" in st["text"], st)
+    run_axe(page, "prise de vue guidée, caméra")
+    page.click("#camVoice")
+    check("Caméra : voix coupable (WCAG 1.4.2)", page.get_attribute("#camVoice", "aria-pressed") == "false")
+    check("Caméra : consigne copiée dans la zone lue par TalkBack quand la voix est coupée", page.wait_for_timeout(2500) is None and len(page.evaluate("document.querySelector('#camSay').textContent")) > 0)
+    check("Caméra : choix d'une photo toujours proposé", page.is_visible("#camFile2"))
+    # Arrière-plan (AdF-034) : caméra coupée, reprise par un geste
+    page.evaluate("Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(200)
+    st = [page.evaluate("AirDeFamille.camState().open"), page.is_visible("#camPaused"), page.is_disabled("#camShot")]
+    page.evaluate("Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(500)
+    check("Caméra : coupée en arrière-plan, rien ne se rallume seul", st == [False, True, True] and not page.evaluate("AirDeFamille.camState().open"), st)
+    page.click("#camResume")
+    attendre(page, "AirDeFamille.camState().open", 10000)
+    check("Caméra : « Reprendre la caméra » rouvre le flux", page.evaluate("AirDeFamille.camState().open") and page.is_hidden("#camPaused"))
+    # Double déclenchement (AdF-032) : prise lente simulée, un seul envoi à l'emplacement
+    page.evaluate("""() => { window.__tp = 0; window.__gen0 = AirDeFamille.slots[1].gen; window.ImageCapture = class { constructor(t) {} async takePhoto() { window.__tp++;
+      await new Promise((r) => setTimeout(r, 400)); const c = new OffscreenCanvas(640, 480); c.getContext('2d').fillRect(0, 0, 640, 480); return c.convertToBlob(); } }; }""")
+    page.evaluate("() => { const b = document.querySelector('#camShot'); b.click(); b.click(); b.click(); }")
+    page.wait_for_timeout(900)
+    check("Caméra : un seul déclenchement pendant une prise en cours (AdF-032)", page.evaluate("[window.__tp, AirDeFamille.slots[1].gen - window.__gen0]") == [1, 1], page.evaluate("[window.__tp, AirDeFamille.slots[1].gen - window.__gen0]"))
+    st = page.evaluate("[AirDeFamille.camState().open, document.querySelector('#camSheet').hidden, AirDeFamille.slots[1].status]")
+    check("Caméra : « Prendre la photo » coupe la caméra et analyse la photo", st[0] is False and st[1] is True and st[2] in ("loading", "busy", "queued", "noface", "ok"), st)
+    attendre(page, "['noface','ok'].includes(AirDeFamille.slots[1].status)", 30000)
+    check("Caméra : photo de la caméra passée par l'analyse", page.evaluate("AirDeFamille.slots[1].status") in ("noface", "ok"))
+    page.wait_for_timeout(300)
+    check("Caméra : focus rendu à l'emplacement après la prise (AdF-034)", page.evaluate("document.activeElement?.closest?.('.slot')?.dataset.i") == "1", page.evaluate("document.activeElement?.outerHTML?.slice(0, 80)"))
+    check("Caméra : « Photo prise » annoncé", "Photo prise" in page.evaluate("document.querySelector('#toasts').textContent"), page.evaluate("document.querySelector('#toasts').textContent"))
+    page.click(".slot[data-i='1'] [data-act=cam]")
+    page.check("#camConsent")
+    page.click("#camGo")
+    attendre(page, "AirDeFamille.camState().open", 20000)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    check("Caméra : Échap ferme la fenêtre et coupe la caméra", not page.evaluate("AirDeFamille.camState().open") and page.is_hidden("#camSheet"))
+    # Fermeture pendant l'ouverture de la caméra (AdF-031) : le flux arrivé après est arrêté
+    page.evaluate("window.__gumDelay = 900")
+    page.click(".slot[data-i='1'] [data-act=cam]")
+    page.check("#camConsent")
+    page.click("#camGo")
+    page.wait_for_timeout(400)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(2500)
+    fuite = page.evaluate("[AirDeFamille.camState().open, window.__streams.length, window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length]")
+    check("Caméra : fermée pendant l'ouverture, aucun flux resté actif ni rallumé (AdF-031)", fuite[0] is False and fuite[2] == 0 and fuite[1] >= 1, fuite)
+    # Changement de caméra pendant l'ouverture (AdF-035) : un seul flux actif
+    page.click(".slot[data-i='1'] [data-act=cam]")
+    page.check("#camConsent")
+    page.click("#camGo")
+    check("Caméra : « Prendre la photo » désactivé pendant la préparation (AdF-036)", page.is_disabled("#camShot"))
+    attendre(page, "!document.querySelector('#camLive').hidden && window.__streams.length >= 0", 5000)
+    page.wait_for_timeout(300)
+    page.evaluate("document.querySelector('#camFlip').click()")
+    page.wait_for_timeout(200)
+    page.evaluate("document.querySelector('#camFlip').click()")
+    page.wait_for_timeout(3000)
+    vivants = page.evaluate("window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length")
+    check("Caméra : changements de caméra pendant l'ouverture, un seul flux actif (AdF-035)", vivants == 1 and page.evaluate("AirDeFamille.camState().open"), vivants)
+    # takePhoto qui ne répond jamais (AdF-035) : image de la vidéo après 2 s
+    page.evaluate("""() => { window.__gen0 = AirDeFamille.slots[1].gen; window.ImageCapture = class { constructor(t) {} takePhoto() { return new Promise(() => {}); } }; }""")
+    page.evaluate("document.querySelector('#camShot').click()")
+    page.wait_for_timeout(2800)
+    st = page.evaluate("[document.querySelector('#camSheet').hidden, AirDeFamille.slots[1].gen - window.__gen0, AirDeFamille.camState().open]")
+    check("Caméra : prise qui ne répond pas, photo prise sur l'image vidéo après 2 s (AdF-035)", st == [True, 1, False], st)
+    attendre(page, "['noface','ok','badfile'].includes(AirDeFamille.slots[1].status)", 30000)
+    # Arrière-plan pendant l'ouverture (AdF-035) : rien d'ouvert écran masqué, reprise proposée avec le focus
+    page.click(".slot[data-i='1'] [data-act=cam]")
+    check("Caméra : état remis à zéro à la réouverture (AdF-036)", page.evaluate("document.querySelector('#camSay').textContent === '' && document.querySelector('#camPaused').hidden"))
+    page.check("#camConsent")
+    page.click("#camGo")
+    attendre(page, "!document.querySelector('#camLive').hidden", 5000)
+    page.wait_for_timeout(300)
+    page.evaluate("Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(1500)
+    vivants = page.evaluate("window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length")
+    page.evaluate("Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(300)
+    st = [vivants, page.evaluate("AirDeFamille.camState().open"), page.is_visible("#camPaused"), page.evaluate("document.activeElement?.id")]
+    check("Caméra : arrière-plan pendant l'ouverture, caméra non allumée, focus sur « Reprendre la caméra » (AdF-035, AdF-036)", st == [0, False, True, "camResume"], st)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    page.evaluate("window.__gumDelay = 0")
+    page.click(".slot[data-i='1'] .x")
     page.wait_for_timeout(200)
 
     # Stockage local : rien par défaut
