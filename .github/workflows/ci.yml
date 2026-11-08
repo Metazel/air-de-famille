@@ -1,7 +1,9 @@
 name: Contrôles
 
-# Garde-fous de confidentialité et tests e2e publics à chaque proposition de
-# changement et à chaque mise à jour de main (le site est publié depuis main).
+# Garde-fous de confidentialité et tests e2e publics à chaque demande de fusion
+# et à chaque mise à jour de main (le site est publié depuis main).
+# Pour que ces contrôles BLOQUENT la mise en ligne, protéger main dans les réglages
+# (Settings > Branches) : demande de fusion obligatoire + contrôle « controles » au vert.
 on:
   pull_request:
   push:
@@ -20,24 +22,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Garde-fous (photos, banque, descripteurs, secrets, CSP)
+      - name: Garde-fous (photos, banque, descripteurs, secrets, CSP, empreintes)
         run: bash tests/garde_fous.sh
 
-      - uses: actions/setup-python@v5
+      - name: Garde-fous sur chaque commit de la demande (un fichier ajouté puis retiré reste public)
+        if: github.event_name == 'pull_request'
+        run: bash tests/garde_fous.sh --historique "origin/${{ github.base_ref }}..HEAD"
+
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Outils de test
+      - name: Outils de test (versions fixées)
         run: |
-          pip install playwright==1.* pillow
+          pip install playwright==1.63.0 pillow==12.3.0
           python -m playwright install --with-deps chromium
-          npm install --prefix tests --no-save --no-package-lock axe-core@4
+          npm install --prefix tests --no-save --no-package-lock axe-core@4.14.0
 
       - name: Tests e2e publics (sans photo réelle)
         env:
