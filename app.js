@@ -2,6 +2,20 @@
   // src/js/util.js
   var $ = (sel, root = document) => root.querySelector(sel);
   var $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+  function applyCss(root) {
+    if (root.nodeType !== 1) return;
+    const list = root.matches("[data-css]") ? [root, ...root.querySelectorAll("[data-css]")] : root.querySelectorAll("[data-css]");
+    for (const n of list) {
+      n.style.cssText = n.dataset.css;
+      n.removeAttribute("data-css");
+    }
+  }
+  function initCssAttrs() {
+    applyCss(document.body);
+    new MutationObserver((muts) => {
+      for (const m of muts) for (const n of m.addedNodes) applyCss(n);
+    }).observe(document.body, { childList: true, subtree: true });
+  }
   var esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   var fmt = (v, d = 2) => v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
   var cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -464,6 +478,12 @@
       q.why.brows = "sourcils en partie cachés";
       q.overall -= 0.05;
     }
+    if (occ.hairSides) {
+      w.push("Cheveux sur les côtés");
+      q.jaw = Math.min(q.jaw, 0.3);
+      q.why.jaw = q.why.jaw ? `${q.why.jaw}, cheveux sur les côtés` : "cheveux sur les côtés";
+      q.overall -= 0.05;
+    }
     if (occ.glasses) {
       w.push("Lunettes");
       q.eyes = Math.min(q.eyes, 0.5);
@@ -486,6 +506,40 @@
     }
     q.overall = Math.max(0.2, q.overall);
     return { warn: w, q };
+  }
+  function imageStats(c, box) {
+    const S = 160, sw = Math.max(box.width, box.height) * 0.8, cx = box.x + box.width / 2, cy = box.y + box.height * 0.55;
+    const o = makeCanvas(S, S), g = ctx2d(o);
+    g.drawImage(c, cx - sw / 2, cy - sw / 2, sw, sw, 0, 0, S, S);
+    const d = g.getImageData(0, 0, S, S).data, L = new Float32Array(S * S);
+    let sum = 0;
+    for (let i = 0; i < S * S; i++) sum += L[i] = lumOf([d[i * 4], d[i * 4 + 1], d[i * 4 + 2]]);
+    const light = sum / (S * S);
+    let s1 = 0, s2 = 0, n = 0;
+    for (let y = 1; y < S - 1; y++)
+      for (let x = 1; x < S - 1; x++) {
+        const i = y * S + x, lap = 4 * L[i] - L[i - 1] - L[i + 1] - L[i - S] - L[i + S];
+        s1 += lap;
+        s2 += lap * lap;
+        n++;
+      }
+    const sharp = Math.sqrt(Math.max(0, s2 / n - (s1 / n) ** 2)) / Math.max(20, light) * 100;
+    return { light: Math.round(light), sharp: Math.round(sharp * 10) / 10 };
+  }
+  var GATE = { minWidth: 110, maxYaw: 0.12, minSharp: 4, minLight: 55, maxLight: 235 };
+  function gate(det) {
+    const redo = [], keep = [], N = det.norm, occ = det.occ || {}, img = det.img;
+    if (det.box.width < GATE.minWidth) redo.push("visage trop petit : rapprochez-vous ou recadrez");
+    if (N && Math.abs((N[30][0] - N[0][0]) / (N[16][0] - N[0][0]) - 0.5) > GATE.maxYaw) redo.push("visage tourné : regardez l'objectif");
+    if (det.warn?.includes("Yeux mi-clos")) redo.push("yeux mi-clos");
+    if (occ.glasses) redo.push("lunettes : retirez-les si possible");
+    if (img && img.sharp < GATE.minSharp) redo.push("photo floue");
+    if (img && img.light < GATE.minLight) redo.push("visage trop sombre");
+    if (img && img.light > GATE.maxLight) redo.push("visage surexposé");
+    if (occ.beard && det.warn?.includes("Barbe")) keep.push("barbe ou moustache : bouche et menton comptent moins");
+    if (occ.fringe) keep.push("frange : sourcils moins fiables");
+    if (occ.hairSides) keep.push("cheveux sur les côtés : forme du visage moins fiable");
+    return { verdict: redo.length ? "reprendre" : keep.length ? "reserve" : "ok", redo, keep };
   }
   var relLabel = (r) => r >= 0.85 ? ["Bonne", "ok"] : r >= 0.6 ? ["Moyenne", "warn"] : ["Faible", "bad"];
 
@@ -578,13 +632,13 @@
         v.onerror = () => rej(new Error("vidéo illisible"));
         setTimeout(() => rej(new Error("délai dépassé")), 15e3);
       });
-      const dur = v.duration;
-      if (!isFinite(dur) || dur <= 0) throw new Error("durée inconnue");
-      const n = Math.min(12, Math.max(4, Math.round(dur * 3))), frames = [];
+      const dur2 = v.duration;
+      if (!isFinite(dur2) || dur2 <= 0) throw new Error("durée inconnue");
+      const n = Math.min(12, Math.max(4, Math.round(dur2 * 3))), frames = [];
       for (let k = 0; k < n; k++) {
         await new Promise((r) => {
           v.onseeked = r;
-          v.currentTime = Math.min(dur - 0.05, dur * (k + 0.5) / n);
+          v.currentTime = Math.min(dur2 - 0.05, dur2 * (k + 0.5) / n);
         });
         const kk = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight)), c = makeCanvas(v.videoWidth * kk, v.videoHeight * kk);
         ctx2d(c).drawImage(v, 0, 0, c.width, c.height);
@@ -682,12 +736,14 @@
       return pts;
     }
   }
-  async function describe(canvas, d, colorCanvas = canvas) {
+  async function describe(canvas, d, colorCanvas = canvas, onStep) {
+    await onStep?.("align");
     const pts = await refineLandmarks(
       canvas,
       d.detection.box,
       d.landmarks.positions.map((p) => [p.x, p.y])
     );
+    await onStep?.("traits");
     const { norm, frame } = normalize(pts);
     const b = d.detection.box, box = { x: b.x, y: b.y, width: b.width, height: b.height };
     const occ = occlusion(colorCanvas, pts, frame, norm);
@@ -705,7 +761,8 @@
       desc: d.descriptor,
       m: measures(symmetrize(norm)),
       app: appearance(canvas, norm, frame),
-      col: sampleColors(colorCanvas, pts)
+      col: sampleColors(colorCanvas, pts),
+      img: { ...imageStats(canvas, box), light: imageStats(colorCanvas, box).light }
     };
   }
   function requalify(det, age) {
@@ -713,12 +770,14 @@
     const { warn, q } = quality(det.norm, det.box, det.occ, age ?? det.age);
     return { ...det, warn, q, id: nextDetId() };
   }
-  async function findFaces(canvas) {
+  async function findFaces(canvas, onStep) {
+    await onStep?.("detect");
     let dets = await detectAll(canvas);
     if (!dets.length) return { work: canvas, faces: [] };
     dets.sort((a, b) => b.detection.box.area - a.detection.box.area);
     let work = exposeFace(canvas, dets[0].detection.box);
     if (work !== canvas) {
+      await onStep?.("light");
       const d2 = await detectAll(work);
       if (d2.length) dets = d2.sort((a, b) => b.detection.box.area - a.detection.box.area);
       else work = canvas;
@@ -774,6 +833,40 @@
       warn: best.warn.filter((w) => !(w === "Visage tourné" && q.overall >= 0.8))
     };
     return { canvas: use[0].c, det };
+  }
+  function fuseDets(dets) {
+    if (dets.length < 2) return dets[0];
+    const main = dets[0], w = dets.map((d) => Math.max(0.05, d.q.overall) * (gate(d).verdict === "reprendre" ? 0.3 : 1)), W = w.reduce((a, b) => a + b, 0);
+    const wavg = (get) => get(main).map((_, i) => dets.reduce((t, d, k) => t + w[k] * get(d)[i], 0) / W);
+    const norm = main.norm.map((_, i) => [0, 1].map((j) => dets.reduce((t, d, k) => t + w[k] * d.norm[i][j], 0) / W));
+    const app = {};
+    for (const key of Object.keys(main.app)) {
+      if (!dets.every((d) => d.app?.[key])) continue;
+      const v = wavg((d) => d.app[key]), nn = Math.hypot(...v) || 1;
+      app[key] = v.map((x) => x / nn);
+    }
+    const medCol = (key) => {
+      const cs = dets.map((d) => d.col?.[key]).filter(Boolean);
+      if (!cs.length) return null;
+      return { lab: [0, 1, 2].map((i) => median(cs.map((c) => c.lab[i]))), rgb: [0, 1, 2].map((i) => Math.round(median(cs.map((c) => c.rgb[i])))) };
+    };
+    const q = { ...main.q, why: { ...main.q.why } };
+    for (const k of ["eyes", "mouth", "jaw", "brows", "overall"]) q[k] = dets.reduce((t, d, i) => t + w[i] * d.q[k], 0) / W;
+    for (const k of ["eyes", "mouth", "jaw", "brows"]) {
+      if (q[k] >= 0.999) delete q.why[k];
+      else if (!q.why[k]) q.why[k] = dets.map((d) => d.q.why?.[k]).find(Boolean) || "une des photos";
+    }
+    return {
+      ...main,
+      id: nextDetId(),
+      norm,
+      m: measures(symmetrize(norm)),
+      app,
+      desc: new Float32Array(wavg((d) => Array.from(d.desc))),
+      col: { skin: medCol("skin"), iris: medCol("iris") },
+      q,
+      photos: dets.length
+    };
   }
 
   // src/js/engine/compare.js
@@ -1366,6 +1459,18 @@
     if (!openSheet) return;
     if (e.target === openSheet.el || e.target.closest("[data-close]")) closeDialog();
   });
+  function stamp(cv) {
+    const g = cv.getContext("2d"), h = Math.max(14, Math.round(cv.height * 0.055)), t = "Image simulée";
+    g.save();
+    g.font = `600 ${h}px system-ui, sans-serif`;
+    const w = g.measureText(t).width + h;
+    g.fillStyle = "rgba(0,0,0,.62)";
+    g.fillRect(cv.width - w - h * 0.4, cv.height - h * 1.8, w, h * 1.4);
+    g.fillStyle = "#fff";
+    g.textBaseline = "middle";
+    g.fillText(t, cv.width - w - h * 0.4 + h / 2, cv.height - h * 1.1);
+    g.restore();
+  }
   function fillSelect(sel, options, keep = true) {
     const prev = sel.value;
     sel.innerHTML = options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("");
@@ -1389,12 +1494,73 @@
     realAge: null,
     ageTyped: false,
     photoDate: null,
-    gen: 0
+    gen: 0,
+    extras: [],
+    fused: null,
+    kept: false,
+    checked: false,
+    simulated: false,
+    prog: null
   });
   var slots = [0, 1, 2].map(blank);
   var slotName = (s) => s.name || `Photo ${LET[s.i]}`;
   var nm = (i) => esc(slotName(slots[i]));
-  var record = (s) => ({ key: `s${s.i}:${s.det.id}`, det: s.det, age: s.realAge });
+  var record = (s) => {
+    const det = s.fused || s.det;
+    return { key: `s${s.i}:${det.id}`, det, age: s.realAge };
+  };
+  function refresh(s) {
+    s.fused = s.det && s.extras.length ? fuseDets([s.det, ...s.extras.map((e) => requalify(e.det, s.realAge))]) : null;
+  }
+  var STEPS = { open: "Ouverture de la photo", detect: "Recherche du visage et empreinte", light: "Correction de la lumière", align: "Alignement des repères", traits: "Mesure des traits", video: "Analyse des images de la vidéo" };
+  var PLAN = { photo: ["open", "wait", "detect", "light", "align", "traits"], video: ["open", "wait", "video"] };
+  var dur = { open: 0.4, wait: 0, detect: 2.5, light: 1.5, align: 1, traits: 0.6, video: 8 };
+  STEPS.wait = "En attente d'une autre analyse";
+  var srSay = (t) => {
+    const r = $("#srStatus");
+    if (r) r.textContent = t;
+  };
+  function startProg(s, label, plan = "photo") {
+    stopProg(s);
+    const now = performance.now();
+    s.prog = { label, plan: PLAN[plan], step: "open", t0: now, ts: now, done: [] };
+    s.prog.tick = setInterval(() => paintProg(s), 1e3);
+    srSay(`${label} : analyse en cours.`);
+  }
+  async function advance(s, step) {
+    const p = s.prog;
+    if (!p || p.step === step) return;
+    const now = performance.now();
+    if (p.step !== "wait") dur[p.step] = dur[p.step] * 0.6 + (now - p.ts) / 1e3 * 0.4;
+    p.done.push(p.step);
+    p.step = step;
+    p.ts = now;
+    paintProg(s);
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  function stopProg(s) {
+    if (!s.prog) return;
+    if (document.activeElement?.closest?.(".prog")) refocus = s.i;
+    clearInterval(s.prog.tick);
+    s.prog = null;
+  }
+  function progInfo(p) {
+    const steps = p.plan.filter((k) => k !== "wait"), i = p.plan.indexOf(p.step);
+    const left = p.plan.slice(i + 1).filter((k) => k !== "light" || p.step === "detect" || p.step === "wait" || p.step === "open");
+    const now = performance.now(), inStep = (now - p.ts) / 1e3;
+    const rest = Math.max(0, dur[p.step] - inStep) + left.reduce((t, k) => t + dur[k], 0);
+    const spent = (now - p.t0) / 1e3, pct = Math.min(97, Math.round(spent / (spent + rest + 0.01) * 100));
+    return { n: steps.indexOf(p.step) + 1, total: steps.length, rest, pct, waiting: p.step === "wait" };
+  }
+  function paintProg(s) {
+    const root = el(s), box = root && $(".prog", root);
+    if (!box || !s.prog) return;
+    const p = s.prog, { n, total, rest, pct, waiting } = progInfo(p);
+    $(".pstep", box).textContent = waiting ? STEPS.wait : `Étape ${n} sur ${total} · ${STEPS[p.step]}`;
+    $(".prest", box).textContent = rest >= 1 ? `environ ${Math.ceil(rest)} s restantes` : "presque fini…";
+    $(".pbar b", box).style.width = `${pct}%`;
+    $(".pbar", box).setAttribute("aria-valuenow", pct);
+  }
   var birthLookup = () => null;
   var setBirthLookup = (fn) => {
     birthLookup = fn;
@@ -1403,21 +1569,24 @@
   var el = (s) => $(`.slot[data-i="${s.i}"]`);
   var lastTouched = 0;
   var lastSlot = () => lastTouched;
+  var emptyLabel = (s) => `${LET[s.i]} ${s.i < 2 ? "Ajouter une photo" : "3ᵉ photo (facultative)"}`;
   function buildSlots() {
     $("#slots").innerHTML = slots.map(
       (s) => `
     <div class="slot" data-i="${s.i}">
       <div class="mwrap">
-        <button class="media" type="button" aria-label="Choisir la photo ${LET[s.i]}">
+        <button class="media" type="button" aria-label="${emptyLabel(s)}">
           <span class="badge" aria-hidden="true">${LET[s.i]}</span>
           <span class="ph">${camIcon}<span>${s.i < 2 ? "Ajouter une photo" : "3ᵉ photo<br>(facultative)"}</span></span>
         </button>
         <button class="x" type="button" aria-label="Retirer la photo ${LET[s.i]}" hidden>✕</button>
+        <div class="prog" hidden><span class="pstep"></span><span class="pbar" role="progressbar" aria-label="Analyse de la photo ${LET[s.i]}" aria-valuemin="0" aria-valuemax="100"><b></b></span><span class="prest"></span><button type="button" class="btn small pcancel">Annuler</button></div>
       </div>
       <input class="name" id="name${s.i}" aria-label="Prénom, photo ${LET[s.i]}" maxlength="24" placeholder="Prénom" autocomplete="off" list="peopleList">
       <label class="agewrap">Âge <input class="age" id="age${s.i}" type="text" inputmode="decimal" placeholder="ex. 4 mois" title="En années (10 ou 10,5) ou en mois (4 mois)" aria-label="Âge réel sur la photo ${LET[s.i]}"></label>
       <div class="chips"></div>
       <input type="file" accept="image/*,video/*" id="file${s.i}" hidden>
+      <input type="file" accept="image/*" id="more${s.i}" hidden>
     </div>`
     ).join("");
     for (const s of slots) {
@@ -1427,8 +1596,32 @@
       });
       $(".media", root).addEventListener("click", () => file.click());
       $(".x", root).addEventListener("click", () => clearSlot(s));
+      const more = $(`#more${s.i}`);
       $(".chips", root).addEventListener("click", (e) => {
-        if (e.target.closest("[data-act=pick]")) openPicker(s);
+        const act = e.target.closest("[data-act]")?.dataset.act;
+        if (act === "pick") openPicker(s);
+        if (act === "retake") file.click();
+        if (act === "keep") {
+          s.kept = true;
+          renderSlot(s);
+          renderResults();
+          $(".chips [data-act]", root)?.focus();
+        }
+        if (act === "check") openMasks(s);
+        if (act === "more") more.click();
+        if (act === "less") {
+          s.extras = [];
+          refresh(s);
+          renderSlot(s);
+          renderResults();
+          emit2("faces");
+          toast(`Photos ajoutées retirées de la photo ${LET[s.i]}.`);
+        }
+      });
+      $(".pcancel", root).addEventListener("click", () => cancelSlot(s));
+      more.addEventListener("change", () => {
+        if (more.files[0]) addExtra(s, more.files[0]);
+        more.value = "";
       });
       file.addEventListener("change", () => {
         if (file.files[0]) loadInto(s, file.files[0]);
@@ -1454,6 +1647,7 @@
   function setAge(s, age) {
     s.realAge = age;
     if (s.det && !s.det.frames) s.det = requalify(s.det, age);
+    refresh(s);
     renderSlot(s);
     renderResults();
     emit2("faces");
@@ -1467,7 +1661,13 @@
       $(`#age${s.i}`).value = "";
       $(`#age${s.i}`).placeholder = `${ageLabel(a)} (calculé)`;
       if (s.det && !s.det.frames) s.det = requalify(s.det, a);
+      refresh(s);
     } else if (a == null && !s.ageTyped) {
+      if (s.realAge != null && s.det && !s.det.frames) {
+        s.realAge = null;
+        s.det = requalify(s.det, null);
+        refresh(s);
+      }
       s.realAge = null;
       $(`#age${s.i}`).placeholder = "ex. 4 mois";
     }
@@ -1479,9 +1679,10 @@
   }
   async function loadInto(s, file) {
     const gen = ++s.gen;
-    Object.assign(s, { canvas: null, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null });
-    renderSlot(s);
+    Object.assign(s, { canvas: null, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null, extras: [], fused: null, kept: false, checked: false, simulated: false });
     const isVideo = file.type.startsWith("video/");
+    startProg(s, `Photo ${LET[s.i]}`, isVideo ? "video" : "photo");
+    renderSlot(s);
     try {
       if (isVideo) {
         const frames = await decodeVideo(file);
@@ -1499,6 +1700,7 @@
     } catch (err) {
       console.error(err);
       if (gen === s.gen) {
+        stopProg(s);
         s.canvas = null;
         s.status = isVideo ? "badvideo" : "badfile";
         renderSlot(s);
@@ -1506,9 +1708,10 @@
       }
     }
   }
-  async function putCanvas(s, canvas, { name, age = null, det = null } = {}) {
+  async function putCanvas(s, canvas, { name, age = null, det = null, simulated = false } = {}) {
     const gen = ++s.gen;
-    Object.assign(s, { canvas, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null, ageTyped: age != null });
+    stopProg(s);
+    Object.assign(s, { canvas, orig: null, work: null, faces: [], det: null, status: "loading", photoDate: null, ageTyped: age != null, extras: [], fused: null, kept: false, checked: false, simulated });
     if (name != null) {
       s.name = name;
       $(`#name${s.i}`).value = name;
@@ -1517,6 +1720,7 @@
     $(`#age${s.i}`).value = age != null ? String(Math.round(age * 10) / 10).replace(".", ",") : "";
     if (det) {
       s.det = { ...requalify(det, age), id: nextDetId() };
+      refresh(s);
       s.status = "ok";
       renderSlot(s);
       renderResults();
@@ -1527,17 +1731,22 @@
   }
   async function analyzeSlot(s, frames = null, gen = s.gen) {
     if (!engine.ready) {
+      stopProg(s);
       s.status = "queued";
       s.pendingFrames = frames;
       renderSlot(s);
       return;
     }
     s.status = "busy";
+    if (!s.prog) startProg(s, `Photo ${LET[s.i]}`, frames ? "video" : "photo");
+    const onStep = (k) => advance(s, k);
     renderSlot(s);
+    await advance(s, "wait");
     try {
       await enqueue(async () => {
         if (gen !== s.gen) return;
         if (frames) {
+          await onStep("video");
           const v = await describeVideo(frames);
           if (gen !== s.gen) return;
           if (!v) {
@@ -1550,7 +1759,7 @@
           s.status = "ok";
           return;
         }
-        const { work, faces } = await findFaces(s.canvas);
+        const { work, faces } = await findFaces(s.canvas, onStep);
         if (gen !== s.gen) return;
         s.work = work;
         s.faces = faces;
@@ -1560,9 +1769,10 @@
           s.det = null;
           return;
         }
-        const det = await describe(work, faces[0], s.canvas);
+        const det = await describe(work, faces[0], s.canvas, onStep);
         if (gen !== s.gen) return;
         s.det = s.realAge != null ? requalify(det, s.realAge) : det;
+        refresh(s);
         s.status = "ok";
       });
     } catch (err) {
@@ -1573,29 +1783,102 @@
       }
     }
     if (gen !== s.gen) return;
+    stopProg(s);
     s.pendingFrames = null;
     renderSlot(s);
     renderResults();
     emit2("faces");
+    if (s.status === "ok") srSay(`Photo ${LET[s.i]} analysée${!s.simulated && gate(s.det).verdict === "reprendre" ? " : photo à reprendre" : ""}.`);
+    else if (s.status !== "queued") srSay(`Photo ${LET[s.i]} : ${s.status === "noface" ? "aucun visage trouvé" : "analyse impossible"}.`);
+  }
+  function cancelSlot(s) {
+    stopProg(s);
+    if (s.status === "ok") {
+      s.extraGen = (s.extraGen || 0) + 1;
+      renderSlot(s);
+      toast("Ajout de photo annulé.");
+      return;
+    }
+    s.gen++;
+    if (s.orig) {
+      Object.assign(s, { canvas: s.orig, orig: null, work: null, det: null, faces: [] });
+      toast("Recadrage annulé : retour à la photo d'origine.");
+      analyzeSlot(s);
+      return;
+    }
+    Object.assign(s, { canvas: null, work: null, faces: [], det: null, status: "empty", photoDate: null, extras: [], fused: null, kept: false, checked: false, simulated: false });
+    renderSlot(s);
+    renderResults();
+    emit2("faces");
+    toast("Analyse annulée : photo retirée, prénom et âge conservés.");
+  }
+  async function addExtra(s, file, det = null) {
+    if (s.status !== "ok" || s.det?.frames || s.simulated || s.extras.length >= 2) return;
+    const gen = s.gen, eg = s.extraGen = (s.extraGen || 0) + 1;
+    try {
+      if (!det) {
+        startProg(s, `Photo ajoutée à ${LET[s.i]}`);
+        renderSlot(s);
+        const step = (k) => advance(s, k);
+        const c = await decodeImage(file);
+        det = await enqueue(async () => {
+          if (gen !== s.gen || eg !== s.extraGen) return null;
+          const { work, faces } = await findFaces(c, step);
+          if (!faces.length || gen !== s.gen || eg !== s.extraGen) return faces.length ? null : "noface";
+          return describe(work, faces[0], c, step);
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      det = "bad";
+    }
+    if (gen !== s.gen || eg !== s.extraGen) {
+      if (eg === s.extraGen) stopProg(s);
+      return;
+    }
+    stopProg(s);
+    if (!det || det === "noface" || det === "bad") {
+      renderSlot(s);
+      toast(det === "bad" ? "Photo ajoutée illisible." : "Aucun visage sur la photo ajoutée.");
+      return;
+    }
+    const g = gate(det);
+    s.extras.push({ det });
+    refresh(s);
+    renderSlot(s);
+    renderResults();
+    emit2("faces");
+    const msg = `${s.extras.length + 1} photos utilisées pour ${slotName(s)}.`;
+    toast(g.verdict === "reprendre" ? `${msg} La photo ajoutée est peu exploitable (${g.redo[0]}) : elle compte moins.` : msg);
   }
   function analyzeQueued() {
     for (const s of slots) if (s.status === "queued") analyzeSlot(s, s.pendingFrames || null);
   }
+  function resetChoices(s) {
+    if (s.extras.length) toast(`Photos ajoutées à la photo ${LET[s.i]} retirées : elles concernaient l'autre visage.`);
+    Object.assign(s, { extras: [], fused: null, kept: false, checked: false });
+  }
   async function chooseFace(s, idx) {
     if (!s.faces[idx] || idx === s.faceIdx) return;
     const gen = ++s.gen;
+    resetChoices(s);
     s.faceIdx = idx;
     s.status = "busy";
+    startProg(s, `Photo ${LET[s.i]}`);
     renderSlot(s);
-    const det = await enqueue(() => describe(s.work || s.canvas, s.faces[idx], s.canvas));
+    await advance(s, "wait");
+    const det = await enqueue(() => gen === s.gen ? describe(s.work || s.canvas, s.faces[idx], s.canvas, (k) => advance(s, k)) : null);
     if (gen !== s.gen) return;
+    stopProg(s);
     s.det = s.realAge != null ? requalify(det, s.realAge) : det;
+    refresh(s);
     s.status = "ok";
     renderSlot(s);
     renderResults();
     emit2("faces");
   }
   function clearSlot(s, quiet = false) {
+    stopProg(s);
     const keepGen = s.gen + 1;
     Object.assign(s, blank(s.i), { gen: keepGen });
     $(`#name${s.i}`).value = "";
@@ -1613,13 +1896,21 @@
     renderResults();
     emit2("faces");
   }
-  var snapshot = (s) => ({ ...s, faces: [...s.faces], nameVal: $(`#name${s.i}`).value, ageVal: $(`#age${s.i}`).value });
+  var snapshot = (s) => ({ ...s, faces: [...s.faces], extras: [...s.extras], prog: null, nameVal: $(`#name${s.i}`).value, ageVal: $(`#age${s.i}`).value });
   function restore(snap) {
     const s = slots[snap.i];
     const { nameVal, ageVal, ...data } = snap;
+    stopProg(s);
     Object.assign(s, data, { gen: s.gen + 1 });
     $(`#name${s.i}`).value = nameVal;
     $(`#age${s.i}`).value = ageVal;
+    if (["busy", "loading"].includes(s.status)) {
+      if (s.det) s.status = "ok";
+      else if (s.canvas) {
+        analyzeSlot(s);
+        return;
+      } else s.status = "empty";
+    }
     renderSlot(s);
     renderResults();
     emit2("faces");
@@ -1630,7 +1921,7 @@
     const s = slots.find((x) => !x.canvas) || [2, 1, 0].map((i) => slots[i]).find((x) => !avoid.includes(x.i)) || slots[2];
     const replaced = s.canvas ? snapshot(s) : null;
     const done = putCanvas(s, canvas, opts);
-    if (replaced) toast(`Photo ${LET[s.i]} remplacée.`, { label: "Annuler", run: () => restore(replaced) }, { after: done });
+    if (replaced) toast(`Photo ${LET[s.i]} remplacée${opts.simulated ? " par une image simulée" : ""}.`, { label: "Annuler", run: () => restore(replaced) }, { after: done });
     else toast(`Placé en photo ${LET[s.i]}.`);
     return s;
   }
@@ -1640,9 +1931,12 @@
     root.classList.toggle("filled", !!s.canvas);
     $(".ph", media).hidden = !!s.canvas;
     $(".x", root).hidden = !s.canvas && s.status === "empty";
-    media.setAttribute("aria-label", `${s.canvas ? "Changer" : "Choisir"} la photo ${LET[s.i]}`);
+    media.setAttribute("aria-label", s.canvas ? `Changer la photo ${LET[s.i]}` : emptyLabel(s));
     if (s.canvas) media.appendChild(thumb(s, 360));
-    const busyText = { busy: "Analyse…", loading: "Ouverture…", queued: "En attente du moteur…" }[s.status];
+    const prog = $(".prog", root);
+    prog.hidden = !s.prog;
+    if (s.prog) paintProg(s);
+    const busyText = { queued: "En attente du moteur…" }[s.status];
     if (busyText) {
       const b = document.createElement("div");
       b.className = "busy";
@@ -1652,8 +1946,10 @@
     let h = "";
     if (s.status === "ok") {
       h += s.det.frames ? `<span class="chip ok">Vidéo · ${s.det.frames} images de face</span>` : '<span class="chip ok">Visage détecté</span>';
+      if (s.simulated) h += '<span class="chip warn">Image simulée</span>';
       if (!s.det.frames)
         h += `<button type="button" class="chip act" data-act="pick">${s.faces.length > 1 ? `Visage ${s.faceIdx + 1}/${s.faces.length} · choisir` : "Recadrer"}</button>`;
+      h += gateHtml(s);
     }
     const bad = {
       noface: "Aucun visage trouvé",
@@ -1663,13 +1959,28 @@
     }[s.status];
     if (bad) h += `<span class="chip bad">${bad}</span>`;
     if (s.status === "noface") h += '<button type="button" class="chip act" data-act="pick">Recadrer à la main</button>';
-    if (s.det) for (const w of s.det.warn) h += `<span class="chip warn">${w}</span>`;
+    const inBox = s.status === "ok" && !s.kept && !s.simulated && gate(s.det).verdict === "reprendre" ? ["Visage tourné", "Visage petit", "Lunettes", "Yeux mi-clos"] : [];
+    if (s.det) {
+      for (const w of s.det.warn) if (!inBox.includes(w)) h += `<span class="chip warn">${w}</span>`;
+    }
+    if (s.status === "ok" && s.det.occ) h += `<button type="button" class="chip act" data-act="check">${s.checked ? "Masques vérifiés · modifier" : "Vérifier les masques"}</button>`;
     if (s.status === "ok") h += ageInfo(s);
+    if (s.status === "ok" && !s.det.frames) {
+      if (s.extras.length) h += `<span class="chip ok">${s.extras.length + 1} photos utilisées</span><button type="button" class="chip act" data-act="less">Retirer les ajouts</button>`;
+      if (s.extras.length < 2) h += `<button type="button" class="chip act" data-act="more" aria-label="Ajouter une photo de la même personne, photo ${LET[s.i]}">Ajouter une photo</button>`;
+    }
     $(".chips", root).innerHTML = h;
     if (refocus === s.i && s.status !== "busy") {
       refocus = null;
-      ($("[data-act=pick]", root) || $(".media", root)).focus();
+      ($("[data-act=check]", root) || $("[data-act=pick]", root) || $(".media", root)).focus();
     }
+  }
+  function gateHtml(s) {
+    if (s.simulated) return "";
+    const g = gate(s.det);
+    if (g.verdict !== "reprendre") return "";
+    if (s.kept) return `<span class="chip bad">Gardée malgré : ${esc(g.redo.join(", "))}</span>`;
+    return `<div class="gatebox" role="group" aria-label="Contrôle de qualité, photo ${LET[s.i]}"><p><strong>Photo à reprendre</strong> : ${esc(g.redo.join(" ; "))}.</p><div class="gateact"><button type="button" class="btn small primary" data-act="retake">Autre photo</button><button type="button" class="btn small" data-act="keep">Garder</button></div></div>`;
   }
   function thumb(s, S) {
     const t = makeCanvas(S, S), g = t.getContext("2d"), c = s.canvas;
@@ -1719,6 +2030,35 @@
       h += Math.abs(d) > 10 ? `<span class="chip">${Math.abs(d)} ans de ${d > 0 ? "plus" : "moins"} que son âge</span>` : `<span class="chip">écart dans la marge d'erreur</span>`;
     }
     return h;
+  }
+  var MASKS = [["glasses", "Lunettes"], ["beard", "Barbe ou moustache"], ["fringe", "Frange sur le front"], ["hairSides", "Cheveux sur les côtés du visage"]];
+  var maskSlot = null;
+  function openMasks(s) {
+    maskSlot = s;
+    $("#maskWho").textContent = `Photo ${LET[s.i]}${s.name ? ` · ${s.name}` : ""}`;
+    $("#maskList").innerHTML = MASKS.map(([k, label]) => `<label class="check"><input type="checkbox" data-k="${k}"${s.det.occ[k] ? " checked" : ""}> ${label}${s.det.occ[k] && !s.checked ? ' <span class="chip">détecté</span>' : ""}</label>`).join("");
+    openDialog($("#maskSheet"), () => {
+      refocus = s.i;
+      maskSlot = null;
+      renderSlot(s);
+    });
+  }
+  function applyMasks() {
+    const s = maskSlot;
+    if (!s?.det?.occ) return;
+    const occ = { ...s.det.occ };
+    for (const c of $$("#maskList input")) occ[c.dataset.k] = c.checked;
+    s.det = requalify({ ...s.det, occ }, s.realAge);
+    s.checked = true;
+    refresh(s);
+    closeDialog();
+    renderResults();
+    emit2("faces");
+    const masked = MASKS.filter(([k]) => occ[k]).map(([, l]) => l.toLowerCase());
+    toast(masked.length ? `Pris en compte : ${masked.join(", ")}.` : "Aucun masque : tous les traits comptent pleinement.");
+  }
+  function initMasks() {
+    $("#maskGo").addEventListener("click", applyMasks);
   }
   var picker = { s: null, mode: "pick", a: null, b: null, scale: 1 };
   var refocus = null;
@@ -1860,6 +2200,7 @@
       const orig = s.orig || s.canvas;
       closeDialog();
       s.gen++;
+      resetChoices(s);
       Object.assign(s, { orig, canvas: c, work: null, det: null, faces: [] });
       analyzeSlot(s);
     });
@@ -1868,6 +2209,7 @@
       if (!s?.orig) return;
       closeDialog();
       s.gen++;
+      resetChoices(s);
       Object.assign(s, { canvas: s.orig, orig: null, work: null, det: null, faces: [] });
       analyzeSlot(s);
     });
@@ -1890,7 +2232,7 @@
     if (!activePair || !res[activePair]) activePair = pairs[0].join("");
     $("#tabs").innerHTML = pairs.map(([a2, b2]) => {
       const k = `${a2}${b2}`, sel = k === activePair;
-      return `<button class="tab" role="tab" id="tab${k}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" aria-controls="pairPanel" data-k="${k}"><span class="pdots"><i style="background:var(${CVAR[a2]})"></i><i style="background:var(${CVAR[b2]})"></i></span>${nm(a2)} · ${nm(b2)}<span class="num">${Math.round(res[k].total)} %</span></button>`;
+      return `<button class="tab" role="tab" id="tab${k}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" aria-controls="pairPanel" data-k="${k}"><span class="pdots"><i data-css="background:var(${CVAR[a2]})"></i><i data-css="background:var(${CVAR[b2]})"></i></span>${nm(a2)} · ${nm(b2)}<span class="num">${Math.round(res[k].total)} %</span></button>`;
     }).join("");
     const [a, b] = activePair.split("").map(Number), R = res[activePair];
     lastRes = { a, b, R };
@@ -1908,11 +2250,11 @@
     const pos = (v) => `${Math.max(0, Math.min(100, v))}%`;
     const st = REFERENCES.stranger, sm = REFERENCES.same;
     const bands = R.bigGap ? "" : `
-      <div class="g-band" style="left:${pos(st.lo)};width:${st.hi - st.lo}%" title="${st.label} : ${st.lo} à ${st.hi} %"></div>
-      <div class="g-band same" style="left:${pos(sm.lo)};width:${sm.hi - sm.lo}%" title="${sm.label} : ${sm.lo} à ${sm.hi} %"></div>`;
-    const labels = R.bigGap ? `<span style="left:50%">Grand écart d'âge : repères non applicables</span>` : `<span style="left:${(st.lo + st.hi) / 2}%">${st.label}<br>${st.lo}–${st.hi} %</span><span style="left:${(sm.lo + sm.hi) / 2}%">${sm.label}<br>${sm.lo}–${sm.hi} %</span>`;
+      <div class="g-band" data-css="left:${pos(st.lo)};width:${st.hi - st.lo}%" title="${st.label} : ${st.lo} à ${st.hi} %"></div>
+      <div class="g-band same" data-css="left:${pos(sm.lo)};width:${sm.hi - sm.lo}%" title="${sm.label} : ${sm.lo} à ${sm.hi} %"></div>`;
+    const labels = R.bigGap ? `<span data-css="left:50%">Grand écart d'âge : repères non applicables</span>` : `<span data-css="left:${(st.lo + st.hi) / 2}%">${st.label}<br>${st.lo}–${st.hi} %</span><span data-css="left:${(sm.lo + sm.hi) / 2}%">${sm.label}<br>${sm.lo}–${sm.hi} %</span>`;
     return `<div class="gauge" role="img" aria-label="Score ${Math.round(R.total)} sur 100. Repères : ${st.label.toLowerCase()} ${st.lo} à ${st.hi} ; ${sm.label.toLowerCase()} ${sm.lo} à ${sm.hi}.">
-      <div class="g-track"><div class="g-line"></div>${bands}<div class="g-mark" style="left:${pos(R.total)}"></div></div>
+      <div class="g-track"><div class="g-line"></div>${bands}<div class="g-mark" data-css="left:${pos(R.total)}"></div></div>
       <div class="g-axis" aria-hidden="true"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
       <div class="g-labels" aria-hidden="true">${labels}</div></div>`;
   }
@@ -1931,8 +2273,24 @@
     <p class="summary">Points communs les plus nets : <strong>${top.join("</strong> et <strong>")}</strong>. Le trait le plus différent : <strong>${low.t.name.toLowerCase()}</strong>.</p>
     ${R.bigGap ? `<p class="hint"><strong>${Math.round(R.ageGap)} ans d'écart</strong> entre les deux visages : les traits mesurés deviennent trompeurs (croissance, rides), le score repose à 80 % sur l'impression globale et reste naturellement bas. L'album compare automatiquement des photos d'âges proches.</p>` : ""}
     <div class="relrow"><span class="chip ${rc}">Fiabilité ${rl.toLowerCase()}</span><span class="hint">${R.rel < 0.85 ? "Photos de face, bouche fermée et bien éclairées donnent un résultat plus sûr." : "Photos de bonne qualité pour la comparaison."}</span></div>
+    ${notes(a, b, R)}
     <p class="hint">Ce n'est pas un test de parenté : une famille se situe souvent entre les deux zones, mais pas toujours.</p>
     <div class="actions"><button type="button" class="btn" id="copyBtn">Copier le résumé</button><button type="button" class="btn" id="shareBtn">Créer une image</button></div>`;
+  }
+  function notes(a, b, R) {
+    const out = [];
+    for (const i of [a, b]) {
+      const s = slots[i], g = s.simulated ? null : gate(s.det);
+      if (s.kept && g?.verdict === "reprendre") out.push(`<li class="bad">${nm(i)} : photo gardée malgré un défaut (${esc(g.redo.join(", "))}). Résultat moins sûr.</li>`);
+      if (s.extras.length) out.push(`<li>${nm(i)} : ${s.extras.length + 1} photos combinées, chacune pondérée par sa qualité.</li>`);
+      if (s.simulated) out.push(`<li class="bad">${nm(i)} : image simulée (vieillissement ou fusion), pas une vraie photo.</li>`);
+    }
+    const miss = [a, b].filter((i) => slots[i].realAge == null);
+    if (miss.length) {
+      const near = Math.abs(R.ageGap - BIG_GAP) < 8;
+      out.push(`<li class="${R.bigGap || near ? "bad" : ""}">Âge ${miss.length > 1 ? "estimé pour les deux photos" : `estimé pour ${nm(miss[0])}`} : l'écart d'âge (${Math.round(R.ageGap)} ans) change la façon de calculer le score${R.bigGap || near ? ", et l'estimation peut se tromper de plus de 10 ans" : ""}. <button type="button" class="linkbtn" data-age="${miss[0]}">Indiquer l'âge réel</button></li>`);
+    }
+    return out.length ? `<ul class="notes-score">${out.join("")}</ul>` : "";
   }
   function summaryText() {
     if (!lastRes) return "";
@@ -1942,6 +2300,7 @@
       `Impression globale ${Math.round(R.ia)} % · traits mesurés ${Math.round(R.geo)} % · fiabilité ${relLabel(R.rel)[0].toLowerCase()}`
     ];
     for (const r of R.traits) lines.push(`- ${r.t.name} : ${r.sim == null ? "non mesurable" : `${Math.round(r.sim)} %`}`);
+    if (slots[a].simulated || slots[b].simulated) lines.push("Contient une image simulée (vieillissement ou fusion).");
     lines.push("Analyse locale, simulation de ressemblance : pas un test de parenté.");
     return lines.join("\n");
   }
@@ -1976,11 +2335,11 @@
       let body;
       if (na) body = `<p class="hint">Non mesurable sur l'une des photos (zone trop petite, sombre ou masquée).</p>`;
       else if (t.color) {
-        const row = (i, c, cls) => `<tr><th>${nm(i)}</th><td class="${cls}">L ${fmt(c.lab[0], 0)} · a ${fmt(c.lab[1], 0)} · b ${fmt(c.lab[2], 0)}<span class="sw" style="background:rgb(${c.rgb})"></span></td></tr>`;
-        body = `<table class="mtable" style="--a:var(${CVAR[a]});--b:var(${CVAR[b]})">${row(a, r.ca, "ca")}${row(b, r.cb, "cb")}<tr><th>Écart de couleur (ΔE)</th><td>${fmt(r.de, 1)}</td></tr></table>
+        const row = (i, c, cls) => `<tr><th>${nm(i)}</th><td class="${cls}">L ${fmt(c.lab[0], 0)} · a ${fmt(c.lab[1], 0)} · b ${fmt(c.lab[2], 0)}<span class="sw" data-css="background:rgb(${c.rgb})"></span></td></tr>`;
+        body = `<table class="mtable" data-css="--a:var(${CVAR[a]});--b:var(${CVAR[b]})">${row(a, r.ca, "ca")}${row(b, r.cb, "cb")}<tr><th>Écart de couleur (ΔE)</th><td>${fmt(r.de, 1)}</td></tr></table>
         <p class="hint">${t.color === "skin" ? "Mesuré sur les deux joues" : "Mesuré au centre de chaque œil, hors pupille et reflets"}, après correction de la lumière par le blanc des yeux. Reste sensible aux éclairages colorés et au maquillage.</p>`;
       } else {
-        body = `<table class="mtable" style="--a:var(${CVAR[a]});--b:var(${CVAR[b]})"><tr><th></th><td class="ca">${nm(a)}</td><td class="cb">${nm(b)}</td></tr>${r.rows.map(
+        body = `<table class="mtable" data-css="--a:var(${CVAR[a]});--b:var(${CVAR[b]})"><tr><th></th><td class="ca">${nm(a)}</td><td class="cb">${nm(b)}</td></tr>${r.rows.map(
           (x) => x.it.shape ? `<tr><th>${x.it.label}</th><td colspan="2">écart moyen ${fmt(x.rms * 100, 1)} %</td></tr>` : `<tr><th>${x.it.label}</th><td class="ca">${fmt(x.va, x.it.d ?? 2)}${unit(x.it)}</td><td class="cb">${fmt(x.vb, x.it.d ?? 2)}${unit(x.it)}</td></tr>`
         ).join("")}</table>`;
         if (r.app != null)
@@ -1992,7 +2351,7 @@
         if (r.rows.some((x) => x.it.u === "é")) body += '<p class="hint">Longueurs en écarts inter-yeux (centre à centre = 1).</p>';
       }
       return `<details class="trait" data-id="${t.id}"${open.has(t.id) ? " open" : ""}>
-      <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}</span><span class="bar${na ? " na" : ""}"><b style="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
+      <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}</span><span class="bar${na ? " na" : ""}"><b data-css="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
       <div class="detail">${body}</div></details>`;
     }).join("");
   }
@@ -2078,7 +2437,7 @@
       g.lineTo(X(P[33][0]), Y(P[33][1]));
       g.stroke();
     });
-    $("#legend").innerHTML = `${[a, b].map((i) => `<span><i style="background:var(${CVAR[i]})"></i>${nm(i)}</span>`).join("")}<span class="hint">quadrillage = ¼ d'écart inter-yeux</span>`;
+    $("#legend").innerHTML = `${[a, b].map((i) => `<span><i data-css="background:var(${CVAR[i]})"></i>${nm(i)}</span>`).join("")}<span class="hint">quadrillage = ¼ d'écart inter-yeux</span>`;
   }
   function renderHeritage(ok) {
     const box = $("#heritage");
@@ -2098,11 +2457,11 @@
       if (sx == null || sy == null)
         return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"></div></div><span class="verdict muted">non mesurable</span></div>`;
       const wx = sx / (sx + sy || 1) * 100;
-      const v = Math.abs(sx - sy) < 6 ? '<span class="muted">à égalité</span>' : `<span style="color:var(${CVAR[sx > sy ? x : y]})">côté ${nm(sx > sy ? x : y)}</span>`;
-      return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"><b style="width:${wx}%;background:var(${CVAR[x]})"></b><b style="flex:1;background:var(${CVAR[y]})"></b></div><div class="hnums"><span>${Math.round(sx)} %</span><span>${Math.round(sy)} %</span></div></div><span class="verdict">${v}</span></div>`;
+      const v = Math.abs(sx - sy) < 6 ? '<span class="muted">à égalité</span>' : `<span data-css="color:var(${CVAR[sx > sy ? x : y]})">côté ${nm(sx > sy ? x : y)}</span>`;
+      return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"><b data-css="width:${wx}%;background:var(${CVAR[x]})"></b><b data-css="flex:1;background:var(${CVAR[y]})"></b></div><div class="hnums"><span>${Math.round(sx)} %</span><span>${Math.round(sy)} %</span></div></div><span class="verdict">${v}</span></div>`;
     }).join("");
     const lead = Math.abs(RX.total - RY.total) < 3 ? `${nm(refIdx)} ressemble autant à ${nm(x)} qu'à ${nm(y)}.` : `Au total, ${nm(refIdx)} ressemble davantage à <strong>${nm(RX.total > RY.total ? x : y)}</strong> (${Math.round(Math.max(RX.total, RY.total))} % contre ${Math.round(Math.min(RX.total, RY.total))} %).`;
-    $("#hrows").innerHTML = `${rows}<p class="summary" style="margin-top:10px">${lead}</p>`;
+    $("#hrows").innerHTML = `${rows}<p class="summary" data-css="margin-top:10px">${lead}</p>`;
   }
   function shareCard() {
     const { a, b, R } = lastRes, W = 1080, H = 1350, c = makeCanvas(W, H), g = c.getContext("2d");
@@ -2163,6 +2522,11 @@
     g.fillStyle = C("--muted");
     g.font = '400 28px "Familjen Grotesk", system-ui, sans-serif';
     g.fillText("Simulation de ressemblance · analyse sur l'appareil · pas un test de parenté", W / 2, H - 50);
+    if (slots[a].simulated || slots[b].simulated) {
+      g.fillStyle = C("--bad");
+      g.font = '600 30px "Familjen Grotesk", system-ui, sans-serif';
+      g.fillText("Contient une image simulée", W / 2, H - 95);
+    }
     return c;
   }
   async function openShare() {
@@ -2206,6 +2570,12 @@
     $("#scoreCard").addEventListener("click", (e) => {
       if (e.target.closest("#copyBtn")) copySummary();
       if (e.target.closest("#shareBtn")) openShare();
+      const ab = e.target.closest("[data-age]");
+      if (ab) {
+        const inp = $(`#age${ab.dataset.age}`);
+        inp.scrollIntoView({ block: "center" });
+        inp.focus();
+      }
     });
     on("theme", () => {
       slots.forEach(renderSlot);
@@ -2488,7 +2858,7 @@
         if (i === j) return '<td><div class="cell self" aria-hidden="true">—</div></td>';
         const r = S[`${i}-${j}`], v = Math.round(r.score), pct = Math.round(Math.max(0, Math.min(100, v)) * 0.85);
         const far = r.gap > 20, key = `${Math.min(i, j)}-${Math.max(i, j)}`;
-        return `<td><button type="button" class="cell${pct > 50 ? " dark" : ""}${far ? " far" : ""}" style="--p:${pct}%" data-k="${key}" aria-pressed="${selectedCell === key}"
+        return `<td><button type="button" class="cell${pct > 50 ? " dark" : ""}${far ? " far" : ""}" data-css="--p:${pct}%" data-k="${key}" aria-pressed="${selectedCell === key}"
       aria-label="${esc(p.name)} et ${esc(q.name)} : ${v} %, écart d'âge ${Math.round(r.gap)} ans"><b>${v}</b><small>Δ ${Math.round(r.gap)} an${Math.round(r.gap) > 1 ? "s" : ""}</small></button></td>`;
       }).join("")}</tr>`
     ).join("");
@@ -2516,8 +2886,8 @@
       (p, n) => `<div class="pair" data-n="${n}"><canvas data-side="f"></canvas><canvas data-side="g"></canvas>
       <div class="pv"><b>${Math.round(p.R.total)} %</b><br>${esc(ps[i].name)} ${ageLabel(p.af.age, p.af.src === "estimé")}${p.af.src === "estimé" ? " (est.)" : ""}<br>${esc(ps[j].name)} ${ageLabel(p.ag.age, p.ag.src === "estimé")}${p.ag.src === "estimé" ? " (est.)" : ""}</div></div>`
     ).join("");
-    box.innerHTML = `<h3 style="margin-top:14px">${esc(ps[i].name)} et ${esc(ps[j].name)} : photos comparées</h3><div class="pairs" style="margin-top:8px">${items}</div>
-    <div class="actions" style="margin-top:10px"><button type="button" class="btn" id="pairOpen">Voir le détail trait par trait</button></div>`;
+    box.innerHTML = `<h3 data-css="margin-top:14px">${esc(ps[i].name)} et ${esc(ps[j].name)} : photos comparées</h3><div class="pairs" data-css="margin-top:8px">${items}</div>
+    <div class="actions" data-css="margin-top:10px"><button type="button" class="btn" id="pairOpen">Voir le détail trait par trait</button></div>`;
     r.chosen.forEach((p, n) => {
       const row = box.querySelector(`.pair[data-n="${n}"]`);
       for (const [side, f] of [
@@ -2615,7 +2985,7 @@
   var target = null;
   var last = null;
   var memo = "";
-  function refresh() {
+  function refresh2() {
     const src = faceSources();
     $("#agNoFace").hidden = !!src.length;
     $("#agPanel").hidden = !src.length;
@@ -2661,7 +3031,8 @@
     draw2("#agBefore", r.head);
     draw2("#agAfter", r.out);
     $("#agCapA").textContent = `${s.name} · ${ageLabel(r.from, s.age == null)}${s.age == null ? " (estimé)" : ""}`;
-    $("#agCapB").textContent = `Simulation · ${ageLabel(r.to)}`;
+    $("#agCapB").textContent = `Image simulée · ${ageLabel(r.to)}`;
+    stamp($("#agAfter"));
     $("#agOut").hidden = false;
     $("#agUse").hidden = false;
   }
@@ -2673,7 +3044,7 @@
       $$("#agTarget button").forEach((x) => x.setAttribute("aria-pressed", x === b));
       run();
     });
-    ["agSrc", "agSex", "agModel"].forEach((id) => $(`#${id}`).addEventListener("change", refresh));
+    ["agSrc", "agSex", "agModel"].forEach((id) => $(`#${id}`).addEventListener("change", refresh2));
     $("#agW").addEventListener("input", (e) => {
       $("#agWv").textContent = `${e.target.value} %`;
       run();
@@ -2683,14 +3054,14 @@
       const { r, s } = last, c = makeCanvas(r.out.width * 2, r.out.height * 2), g = c.getContext("2d");
       g.imageSmoothingQuality = "high";
       g.drawImage(r.out, 0, 0, c.width, c.height);
-      sendToSlot(c, { name: `${s.name} ${Math.round(r.to)} ans (simulé)`.slice(0, 24), age: r.to }, s.slot != null ? [s.slot] : []);
+      sendToSlot(c, { name: `${s.name} ${Math.round(r.to)} ans (simulé)`.slice(0, 24), age: r.to, simulated: true }, s.slot != null ? [s.slot] : []);
     });
-    on("faces", refresh);
+    on("faces", refresh2);
     on("theme", () => {
       memo = "";
-      refresh();
+      refresh2();
     });
-    refresh();
+    refresh2();
   }
 
   // src/js/ui/fusion.js
@@ -2700,7 +3071,7 @@
   var result = null;
   var playing = 0;
   var reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function refresh2() {
+  function refresh22() {
     const src = faceSources();
     const enough = src.length >= 2;
     $("#fuNoFace").hidden = enough;
@@ -2775,7 +3146,8 @@
     result = compute(t);
     if (!result) return;
     draw("#fuCm", result.out);
-    $("#fuCapM").textContent = `${Math.round((1 - t) * 100)} / ${Math.round(t * 100)}${$("#fuAge").value ? ` · ${ageLabel(result.age)}` : ""}`;
+    stamp($("#fuCm"));
+    $("#fuCapM").textContent = `Image simulée · ${Math.round((1 - t) * 100)} / ${Math.round(t * 100)}${$("#fuAge").value ? ` · ${ageLabel(result.age)}` : ""}`;
   }
   var renderSoon = debounce(render2, 60);
   function play() {
@@ -2794,7 +3166,10 @@
       if (!playing) return;
       const t = 0.5 - 0.5 * Math.cos((now - t0) / 4e3 * 2 * Math.PI);
       const r = compute(t, true);
-      if (r) draw("#fuCm", r.out);
+      if (r) {
+        draw("#fuCm", r.out);
+        stamp($("#fuCm"));
+      }
       $("#fuTv").textContent = `${Math.round(t * 100)} %`;
       playing = requestAnimationFrame(step);
     };
@@ -2835,22 +3210,22 @@
       const name = `Fusion ${result.A.name.slice(0, 8)}+${result.B.name.slice(0, 8)}`.slice(0, 24);
       sendToSlot(
         c,
-        { name, age: result.age },
+        { name, age: result.age, simulated: true },
         [result.A.slot, result.B.slot].filter((x) => x != null)
       );
     });
     on("faces", () => {
-      if (!playing) refresh2();
+      if (!playing) refresh22();
     });
     on("theme", () => {
       prepKey = "";
       renderKey = "";
-      refresh2();
+      refresh22();
     });
     on("mode", (m) => {
       if (m !== "fusion" && playing) stop();
     });
-    refresh2();
+    refresh22();
   }
 
   // src/js/main.js
@@ -2964,8 +3339,11 @@
     on("clear-slot", (i) => clearSlot(slots[i]));
   }
   async function boot() {
+    initCssAttrs();
     buildSlots();
     initPicker();
+    initMasks();
+    $("#privacyBtn").addEventListener("click", () => openDialog($("#privacySheet")));
     initResults();
     initAlbum();
     setBirthLookup(birthOf);
@@ -3016,7 +3394,11 @@
     faceSources,
     setMode,
     engine,
-    $$
+    $$,
+    putCanvas,
+    addExtra,
+    gate,
+    moteur: { normalize, measures, symmetrize, appearance, sampleColors, quality }
   };
   boot();
 })();

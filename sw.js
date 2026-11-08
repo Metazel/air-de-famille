@@ -1,11 +1,12 @@
 // Air de famille — fonctionnement hors ligne.
 // Page et code : réseau d'abord (les mises à jour arrivent), cache en secours.
 // Modèles, moteur, polices, icônes : cache d'abord (ils ne changent pas).
-const CACHE = 'air-de-famille-2.0';
+const CACHE = 'air-de-famille-2.1';
 const CORE = [
   './',
   'index.html',
   'app.js',
+  'app.css',
   'manifest.webmanifest',
   'icon-192.png',
   'icon-512.png',
