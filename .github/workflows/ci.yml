@@ -1,0 +1,53 @@
+name: Contrôles
+
+# Garde-fous de confidentialité et tests e2e publics à chaque proposition de
+# changement et à chaque mise à jour de main (le site est publié depuis main).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controles-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Garde-fous (photos, banque, descripteurs, secrets, CSP)
+        run: bash tests/garde_fous.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Outils de test
+        run: |
+          pip install playwright==1.* pillow
+          python -m playwright install --with-deps chromium
+          npm install --prefix tests --no-save --no-package-lock axe-core@4
+
+      - name: Tests e2e publics (sans photo réelle)
+        env:
+          RAPPORT: rapport_e2e.json
+        run: python tests/e2e_public.py .
+
+      - name: Rapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-e2e
+          path: rapport_e2e.json
+          retention-days: 30
