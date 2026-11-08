@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Signaler une faille de sécurité ou de confidentialité
+    url: https://github.com/metazel/air-de-famille/security/advisories/new
+    about: En privé, jamais dans un ticket public. Voir SECURITY.md.

@@ -1,0 +1,58 @@
+name: Contrôles
+
+# Garde-fous de confidentialité et tests e2e publics à chaque demande de fusion
+# et à chaque mise à jour de main (le site est publié depuis main).
+# Pour que ces contrôles BLOQUENT la mise en ligne, protéger main dans les réglages
+# (Settings > Branches) : demande de fusion obligatoire + contrôle « controles » au vert.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controles-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Garde-fous (photos, banque, descripteurs, secrets, CSP, empreintes)
+        run: bash tests/garde_fous.sh
+
+      - name: Garde-fous sur chaque commit de la demande (un fichier ajouté puis retiré reste public)
+        if: github.event_name == 'pull_request'
+        run: bash tests/garde_fous.sh --historique "origin/${{ github.base_ref }}..HEAD"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Outils de test (versions fixées)
+        run: |
+          pip install playwright==1.63.0 pillow==12.3.0
+          python -m playwright install --with-deps chromium
+          npm install --prefix tests --no-save --no-package-lock axe-core@4.14.0
+
+      - name: Tests e2e publics (sans photo réelle)
+        env:
+          RAPPORT: rapport_e2e.json
+        run: python tests/e2e_public.py .
+
+      - name: Rapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-e2e
+          path: rapport_e2e.json
+          retention-days: 30

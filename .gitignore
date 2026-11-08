@@ -1,0 +1,24 @@
+# Jamais dans ce dépôt public : photos réelles, banque familiale, descripteurs,
+# sources de développement et tests privés.
+*.jpg
+*.jpeg
+*.heic
+*.webp
+*.mp4
+*.mov
+*.avif
+*.heif
+*.zip
+banque*/
+bank*/
+photos/
+dev/
+tests/prive/
+*.descripteurs.json
+
+# Outils et résultats de test
+node_modules/
+tests/node_modules/
+rapport_e2e.json
+__pycache__/
+.DS_Store

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Bloque le commit si une photo, une banque, un descripteur ou un secret est indexé.
+# Activation, une fois par poste : git config core.hooksPath .githooks
+exec bash "$(git rev-parse --show-toplevel)/tests/garde_fous.sh" --index
