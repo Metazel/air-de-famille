@@ -3,6 +3,22 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.2.0] — 2026-11-08
+
+- Ajout : lunettes de vue (AdF-028). Quand les lunettes sont confirmées dans « Vérifier les masques »,
+  le trait Yeux n'est pas noté (« non mesurable : lunettes ») et la mesure des coins internes, vue à
+  travers les verres, est retirée de l'écart des yeux. Mention dans le résumé et sur l'image de partage.
+  Rien n'est enregistré ; les photos sans lunettes confirmées ne changent pas.
+- Si une photo a des lunettes confirmées, toutes les comparaisons (paires, héritage à 3 photos) retirent
+  les mêmes mesures, pour que les scores restent comparables ; note sous le score ; couleur des yeux
+  non notée non plus.
+- Accessibilité : contraste des valeurs dans le détail des traits et dans l'héritage (AdF-030).
+- Confidentialité : usage de l'indication « lunettes » précisé.
+- Cache hors ligne renouvelé (`air-de-famille-2.2`).
+- Score inchangé par défaut : régression privée 378 paires, écart max 0,000000. Photos de test de David
+  avec et sans lunettes : 82 % → 85 % (écart des yeux 60 % → 78 %).
+- Tests : 56 contrôles e2e publics.
+
 ## [v2.1.0] — 2026-11-08
 
 Lot 1 du cadrage « prise de vue guidée et analyse » : améliorations sans caméra.
@@ -11,9 +27,6 @@ Lot 1 du cadrage « prise de vue guidée et analyse » : améliorations sans cam
   visage tourné, yeux mi-clos ou lunettes → « Photo à reprendre » avec la raison, choix
   « Autre photo » ou « Garder » (une photo gardée est signalée sous le score). Seuils calibrés
   sur une banque privée, sans faux rejet sur les photos d'origine.
-- Ajout : repères mal placés détectés (contour du visage irrégulier, typique d'une photo bougée)
-  et avertissement quand l'impression globale est élevée mais les traits très bas (AdF-027,
-  constaté par un test réel).
 - Ajout : jusqu'à 3 photos par personne dans Comparer (CU4), combinées en mémoire et pondérées
   par leur qualité ; aucune photo enregistrée.
 - Ajout : fenêtre « Vérifier les masques » (CU5) : lunettes, barbe, frange et cheveux sur les côtés
@@ -30,7 +43,7 @@ Lot 1 du cadrage « prise de vue guidée et analyse » : améliorations sans cam
   de focus du champ Prénom (AdF-012).
 - Cache hors ligne renouvelé (`air-de-famille-2.1`), `app.css` ajouté.
 - Moteur : calcul du score inchangé (régression privée : 378 paires, écart max 0,000000).
-- Tests : 52 contrôles e2e publics (22 de plus), avec un visage synthétique dessiné à la volée.
+- Tests : 50 contrôles e2e publics (20 de plus), avec un visage synthétique dessiné à la volée.
 
 ## Dépôt — 2026-11-08
 

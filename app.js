@@ -897,7 +897,7 @@
       w: 0.6,
       items: [
         { k: "eyeSpan", label: "Écart ÷ largeur du visage", s: 0.0103, r: 0.48 },
-        { k: "inner", label: "Coins internes", s: 67e-4, r: 0.1, u: "é" }
+        { k: "inner", label: "Coins internes", s: 67e-4, r: 0.1, u: "é", lens: true }
       ]
     },
     {
@@ -979,15 +979,17 @@
   };
   var cache = /* @__PURE__ */ new Map();
   var clearCompareCache = () => cache.clear();
-  function compare(A, B) {
-    const key = `${A.key}|${B.key}|${A.age ?? ""}|${B.age ?? ""}`;
+  function compare(A, B, opt = {}) {
+    const key = `${A.key}|${B.key}|${A.age ?? ""}|${B.age ?? ""}${opt.lens ? "|L" : ""}`;
     const hit = cache.get(key);
     if (hit) return hit;
     const qa = A.det.q, qb = B.det.q;
     const ageA = A.age ?? A.det.age, ageB = B.age ?? B.det.age;
     const ageGap = ageA != null && ageB != null ? Math.abs(ageA - ageB) : 0;
     const bigGap = ageGap > BIG_GAP;
+    const lens = !!(A.det.lens || B.det.lens || opt.lens);
     const traits = TRAITS.map((t) => {
+      if (lens && (t.id === "yeux" || t.color === "iris")) return { t, sim: null, wq: 0, lens: true };
       if (t.color) {
         const ca = A.det.col[t.color], cb = B.det.col[t.color];
         if (!ca || !cb) return { t, sim: null, wq: 0 };
@@ -995,7 +997,7 @@
         return { t, sim: toSim((de / t.s) ** 2), de, ca, cb, wq: 1 };
       }
       let sw2 = 0, sz = 0;
-      const rows = t.items.map((it) => {
+      const rows = t.items.filter((it) => !(lens && it.lens)).map((it) => {
         const va = A.det.m[it.k], vb = B.det.m[it.k];
         let z, o;
         if (it.shape) {
@@ -1022,7 +1024,7 @@
       let wq = t.q && (qa[t.q] < 1 || qb[t.q] < 1) ? Math.min(qa[t.q], qb[t.q]) : 1;
       const why = t.q ? qa.why?.[t.q] || qb.why?.[t.q] : null;
       if (bigGap && t.id === "prop") wq *= 0.5;
-      return { t, rows, geo: geo2, app, sim, wq, why };
+      return { t, rows, geo: geo2, app, sim, wq, why, lensCut: lens && t.items.some((it) => it.lens) };
     });
     const dist = faceapi.euclideanDistance(A.det.desc, B.det.desc);
     const ia = 100 / (1 + Math.exp((dist - 0.55) / 0.07));
@@ -1035,7 +1037,7 @@
       }
     const geo = ss / sw;
     const wIA = bigGap ? 0.8 : 0.4;
-    const R = { traits, ia, dist, geo, total: wIA * ia + (1 - wIA) * geo, rel: Math.min(qa.overall, qb.overall), ageGap, bigGap, wIA };
+    const R = { traits, ia, dist, geo, total: wIA * ia + (1 - wIA) * geo, rel: Math.min(qa.overall, qb.overall), ageGap, bigGap, wIA, lens, lensA: !!A.det.lens, lensB: !!B.det.lens };
     if (cache.size > 2e3) cache.delete(cache.keys().next().value);
     cache.set(key, R);
     return R;
@@ -1511,6 +1513,7 @@
   var slots = [0, 1, 2].map(blank);
   var slotName = (s) => s.name || `Photo ${LET[s.i]}`;
   var nm = (i) => esc(slotName(slots[i]));
+  var lensAny = () => slots.some((s) => s.status === "ok" && (s.fused || s.det)?.lens);
   var record = (s) => {
     const det = s.fused || s.det;
     return { key: `s${s.i}:${det.id}`, det, age: s.realAge };
@@ -2042,7 +2045,7 @@
   function openMasks(s) {
     maskSlot = s;
     $("#maskWho").textContent = `Photo ${LET[s.i]}${s.name ? ` · ${s.name}` : ""}`;
-    $("#maskList").innerHTML = MASKS.map(([k, label]) => `<label class="check"><input type="checkbox" data-k="${k}"${s.det.occ[k] ? " checked" : ""}> ${label}${s.det.occ[k] && !s.checked ? ' <span class="chip">détecté</span>' : ""}</label>`).join("");
+    $("#maskList").innerHTML = MASKS.map(([k, label]) => `<label class="check"><input type="checkbox" data-k="${k}"${s.det.occ[k] ? " checked" : ""}> ${label}${k === "glasses" ? " (les yeux ne seront pas notés)" : ""}${s.det.occ[k] && !s.checked ? ' <span class="chip">détecté</span>' : ""}</label>`).join("");
     openDialog($("#maskSheet"), () => {
       refocus = s.i;
       maskSlot = null;
@@ -2054,14 +2057,14 @@
     if (!s?.det?.occ) return;
     const occ = { ...s.det.occ };
     for (const c of $$("#maskList input")) occ[c.dataset.k] = c.checked;
-    s.det = requalify({ ...s.det, occ }, s.realAge);
+    s.det = { ...requalify({ ...s.det, occ }, s.realAge), lens: !!occ.glasses };
     s.checked = true;
     refresh(s);
     closeDialog();
     renderResults();
     emit2("faces");
     const masked = MASKS.filter(([k]) => occ[k]).map(([, l]) => l.toLowerCase());
-    toast(masked.length ? `Pris en compte : ${masked.join(", ")}.` : "Aucun masque : tous les traits comptent pleinement.");
+    toast(masked.length ? `Pris en compte : ${masked.join(", ")}.${occ.glasses ? " Les yeux ne sont pas notés : les verres changent leur taille apparente." : ""}` : "Aucun masque : tous les traits comptent pleinement.");
   }
   function initMasks() {
     $("#maskGo").addEventListener("click", applyMasks);
@@ -2234,7 +2237,8 @@
     const pairs = [];
     for (let a2 = 0; a2 < ok.length; a2++) for (let b2 = a2 + 1; b2 < ok.length; b2++) pairs.push([ok[a2].i, ok[b2].i]);
     const res = {};
-    for (const [a2, b2] of pairs) res[`${a2}${b2}`] = compare(record(slots[a2]), record(slots[b2]));
+    const lensAll = lensAny();
+    for (const [a2, b2] of pairs) res[`${a2}${b2}`] = compare(record(slots[a2]), record(slots[b2]), { lens: lensAll });
     if (!activePair || !res[activePair]) activePair = pairs[0].join("");
     $("#tabs").innerHTML = pairs.map(([a2, b2]) => {
       const k = `${a2}${b2}`, sel = k === activePair;
@@ -2291,6 +2295,10 @@
       if (s.extras.length) out.push(`<li>${nm(i)} : ${s.extras.length + 1} photos combinées, chacune pondérée par sa qualité.</li>`);
       if (s.simulated) out.push(`<li class="bad">${nm(i)} : image simulée (vieillissement ou fusion), pas une vraie photo.</li>`);
     }
+    if (R.lens) {
+      const who = [a, b].filter((i) => (slots[i].fused || slots[i].det).lens).map(nm);
+      out.push(`<li>Yeux et couleur des yeux non notés : lunettes confirmées${who.length ? ` (${who.join(" et ")})` : " sur une autre photo"}. Score calculé sans ces traits ; les repères « inconnus / même personne » restent indicatifs.</li>`);
+    }
     if (R.ia >= 80 && R.geo <= 25) out.push(`<li class="bad">Impression globale élevée (${Math.round(R.ia)} %) mais traits très bas (${Math.round(R.geo)} %) : les repères d'une photo sont sans doute mal placés (photo floue ou bougée ?). Vérifiez le contour superposé ou reprenez la photo.</li>`);
     const miss = [a, b].filter((i) => slots[i].realAge == null);
     if (miss.length) {
@@ -2306,7 +2314,7 @@
       `Air de famille — ${slotName(slots[a])} / ${slotName(slots[b])} : ${Math.round(R.total)} % (${level(R.total).toLowerCase()})`,
       `Impression globale ${Math.round(R.ia)} % · traits mesurés ${Math.round(R.geo)} % · fiabilité ${relLabel(R.rel)[0].toLowerCase()}`
     ];
-    for (const r of R.traits) lines.push(`- ${r.t.name} : ${r.sim == null ? "non mesurable" : `${Math.round(r.sim)} %`}`);
+    for (const r of R.traits) lines.push(`- ${r.t.name} : ${r.sim == null ? r.lens ? "non mesurable (lunettes confirmées)" : "non mesurable" : `${Math.round(r.sim)} %`}`);
     if (slots[a].simulated || slots[b].simulated) lines.push("Contient une image simulée (vieillissement ou fusion).");
     lines.push("Analyse locale, simulation de ressemblance : pas un test de parenté.");
     return lines.join("\n");
@@ -2334,13 +2342,18 @@
       toast(done ? "Résumé copié." : "Copie impossible ici : sélectionnez le texte à la main.");
     }
   }
+  function lensWho(a, b) {
+    const who = [a, b].filter((i) => (slots[i].fused || slots[i].det).lens).map(nm);
+    return who.length ? `lunettes confirmées (${who.join(" et ")})` : "lunettes confirmées sur une autre photo";
+  }
   function renderTraits(a, b, R) {
     const open = new Set($$("#traits details[open]").map((d) => d.dataset.id));
     const unit = (it) => it.u === "°" ? "°" : "";
     $("#traits").innerHTML = R.traits.map((r) => {
       const t = r.t, na = r.sim == null, p = na ? 0 : Math.round(r.sim);
       let body;
-      if (na) body = `<p class="hint">Non mesurable sur l'une des photos (zone trop petite, sombre ou masquée).</p>`;
+      if (na && r.lens) body = `<p class="hint">Non mesurable : ${lensWho(a, b)}. Les verres changent la taille et la couleur apparentes des yeux ; pour mesurer ce trait, utilisez une photo sans lunettes.</p>`;
+      else if (na) body = `<p class="hint">Non mesurable sur l'une des photos (zone trop petite, sombre ou masquée).</p>`;
       else if (t.color) {
         const row = (i, c, cls) => `<tr><th>${nm(i)}</th><td class="${cls}">L ${fmt(c.lab[0], 0)} · a ${fmt(c.lab[1], 0)} · b ${fmt(c.lab[2], 0)}<span class="sw" data-css="background:rgb(${c.rgb})"></span></td></tr>`;
         body = `<table class="mtable" data-css="--a:var(${CVAR[a]});--b:var(${CVAR[b]})">${row(a, r.ca, "ca")}${row(b, r.cb, "cb")}<tr><th>Écart de couleur (ΔE)</th><td>${fmt(r.de, 1)}</td></tr></table>
@@ -2353,12 +2366,13 @@
           body += `<div class="sub"><span>Texture de la zone</span><b>${Math.round(r.app)} %</b><span>Mesures</span><b>${Math.round(r.geo)} %</b></div>`;
         if (r.wq < 1 && r.why)
           body += `<p class="hint">Zone peu fiable sur l'une des photos (${r.why}) : son poids dans le score est réduit.</p>`;
+        if (r.lensCut) body += '<p class="hint">Lunettes confirmées : la mesure des coins internes, vue à travers les verres, est retirée.</p>';
         if (t.id === "visage")
           body += '<p class="hint">Le contour du visage est le repère le moins stable : il varie avec la pose, la coiffure et la barbe.</p>';
         if (r.rows.some((x) => x.it.u === "é")) body += '<p class="hint">Longueurs en écarts inter-yeux (centre à centre = 1).</p>';
       }
       return `<details class="trait" data-id="${t.id}"${open.has(t.id) ? " open" : ""}>
-      <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}</span><span class="bar${na ? " na" : ""}"><b data-css="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
+      <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}${r.lens ? "<em>non mesurable : lunettes</em>" : ""}</span><span class="bar${na ? " na" : ""}"><b data-css="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
       <div class="detail">${body}</div></details>`;
     }).join("");
   }
@@ -2457,14 +2471,14 @@
     const sel = $("#refSel");
     sel.innerHTML = ok.map((s) => `<option value="${s.i}"${s.i === refIdx ? " selected" : ""}>${esc(slotName(s))}</option>`).join("");
     const [x, y] = ok.map((s) => s.i).filter((i) => i !== refIdx);
-    const RX = compare(record(slots[refIdx]), record(slots[x])), RY = compare(record(slots[refIdx]), record(slots[y]));
+    const lensAll = lensAny(), RX = compare(record(slots[refIdx]), record(slots[x]), { lens: lensAll }), RY = compare(record(slots[refIdx]), record(slots[y]), { lens: lensAll });
     $("#heritageIntro").innerHTML = `Pour chaque trait de <strong>${nm(refIdx)}</strong>, la barre penche vers le visage le plus proche.`;
     const rows = TRAITS.map((t, n) => {
       const sx = RX.traits[n].sim, sy = RY.traits[n].sim, name = `<span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}</span>`;
       if (sx == null || sy == null)
-        return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"></div></div><span class="verdict muted">non mesurable</span></div>`;
+        return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"></div></div><span class="verdict muted">non mesurable${RX.traits[n].lens ? " (lunettes)" : ""}</span></div>`;
       const wx = sx / (sx + sy || 1) * 100;
-      const v = Math.abs(sx - sy) < 6 ? '<span class="muted">à égalité</span>' : `<span data-css="color:var(${CVAR[sx > sy ? x : y]})">côté ${nm(sx > sy ? x : y)}</span>`;
+      const v = Math.abs(sx - sy) < 6 ? '<span class="muted">à égalité</span>' : `<span data-css="text-decoration:underline 3px var(${CVAR[sx > sy ? x : y]});text-underline-offset:3px">côté ${nm(sx > sy ? x : y)}</span>`;
       return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"><b data-css="width:${wx}%;background:var(${CVAR[x]})"></b><b data-css="flex:1;background:var(${CVAR[y]})"></b></div><div class="hnums"><span>${Math.round(sx)} %</span><span>${Math.round(sy)} %</span></div></div><span class="verdict">${v}</span></div>`;
     }).join("");
     const lead = Math.abs(RX.total - RY.total) < 3 ? `${nm(refIdx)} ressemble autant à ${nm(x)} qu'à ${nm(y)}.` : `Au total, ${nm(refIdx)} ressemble davantage à <strong>${nm(RX.total > RY.total ? x : y)}</strong> (${Math.round(Math.max(RX.total, RY.total))} % contre ${Math.round(Math.min(RX.total, RY.total))} %).`;
@@ -2507,33 +2521,38 @@
     g.font = '700 50px "Familjen Grotesk", system-ui, sans-serif';
     g.fillText(`Ressemblance ${level(R.total).toLowerCase()}`, W / 2, 975);
     const main = R.traits.filter((r) => r.sim != null && !r.t.tag);
+    const mentions = [];
+    if (R.lens) mentions.push(["--muted", "500 28px", "Yeux non notés : lunettes confirmées"]);
+    if (slots[a].simulated || slots[b].simulated) mentions.push(["--bad", "600 30px", "Contient une image simulée"]);
+    const step = Math.min(46, (H - 1030 - 90 - mentions.length * 44) / Math.max(1, main.length));
+    const bh = Math.min(22, step - 8), fs = Math.round(Math.min(32, step - 4));
     main.forEach((r, n) => {
-      const y = 1050 + n * 46, x0 = 330, bw = 560;
+      const y = 1035 + n * step, x0 = 330, bw = 560;
       g.textAlign = "right";
       g.fillStyle = C("--muted");
-      g.font = '500 32px "Familjen Grotesk", system-ui, sans-serif';
-      g.fillText(r.t.name, x0 - 24, y + 12);
+      g.font = `500 ${fs}px "Familjen Grotesk", system-ui, sans-serif`;
+      g.fillText(r.t.name, x0 - 24, y - 8 + bh / 2 + fs * 0.35);
       g.fillStyle = C("--sunk");
       g.beginPath();
-      g.roundRect(x0, y - 8, bw, 22, 11);
+      g.roundRect(x0, y - 8, bw, bh, bh / 2);
       g.fill();
       g.fillStyle = C("--accent");
       g.beginPath();
-      g.roundRect(x0, y - 8, Math.max(22, bw * r.sim / 100), 22, 11);
+      g.roundRect(x0, y - 8, Math.max(bh, bw * r.sim / 100), bh, bh / 2);
       g.fill();
       g.textAlign = "left";
       g.fillStyle = C("--ink");
-      g.fillText(`${Math.round(r.sim)} %`, x0 + bw + 20, y + 12);
+      g.fillText(`${Math.round(r.sim)} %`, x0 + bw + 20, y - 8 + bh / 2 + fs * 0.35);
     });
     g.textAlign = "center";
     g.fillStyle = C("--muted");
     g.font = '400 28px "Familjen Grotesk", system-ui, sans-serif';
     g.fillText("Simulation de ressemblance · analyse sur l'appareil · pas un test de parenté", W / 2, H - 50);
-    if (slots[a].simulated || slots[b].simulated) {
-      g.fillStyle = C("--bad");
-      g.font = '600 30px "Familjen Grotesk", system-ui, sans-serif';
-      g.fillText("Contient une image simulée", W / 2, H - 95);
-    }
+    mentions.forEach(([col, font, text], k) => {
+      g.fillStyle = C(col);
+      g.font = `${font} "Familjen Grotesk", system-ui, sans-serif`;
+      g.fillText(text, W / 2, H - 95 - (mentions.length - 1 - k) * 44);
+    });
     return c;
   }
   async function openShare() {

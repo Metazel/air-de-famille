@@ -130,7 +130,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .mtable th{text-align:left;font-weight:500;color:var(--muted);padding:5px 6px 5px 0}
 .mtable td{padding:5px 0 5px 6px;font-family:var(--font-data);font-size:.76rem;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .mtable tr+tr{border-top:1px dashed var(--line)}
-.mtable .ca{color:var(--a)} .mtable .cb{color:var(--b)}
+/* AdF-030 : texte à fort contraste, la couleur de la personne passe en soulignement */
+.mtable .ca,.mtable .cb{color:var(--ink);text-decoration:underline 2px;text-underline-offset:3px}
+.mtable .ca{text-decoration-color:var(--a)} .mtable .cb{text-decoration-color:var(--b)}
 .sw{display:inline-block;width:18px;height:18px;border-radius:5px;vertical-align:-4px;border:1px solid var(--line);margin-left:4px}
 .hint{font-size:.78rem;color:var(--muted)}
 .scale{display:grid;grid-template-columns:minmax(0,9.5rem) minmax(0,1fr) 3.4rem;gap:12px;font-family:var(--font-data);font-size:.62rem;color:var(--muted);padding-bottom:4px}
