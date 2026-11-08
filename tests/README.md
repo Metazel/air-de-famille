@@ -13,7 +13,9 @@ python tests/e2e_public.py .                          # e2e, accessibilité, CSP
 
 - `empreintes.sha256` : empreintes du moteur, des modèles, des polices et des icônes. À régénérer
   seulement lors d'une mise à jour volontaire, avec justification dans la demande de fusion.
-- La CSP attendue figure dans les deux scripts : la mettre à jour aux deux endroits si elle change
-  (par exemple à la correction d'AdF-010).
+- La CSP attendue figure dans les deux scripts : la mettre à jour aux deux endroits si elle change.
+- `visage_synthetique.js` : visage dessiné à la volée (68 repères génériques, empreinte aléatoire),
+  injecté par `AirDeFamille.putCanvas` pour tester résultats, contrôle de qualité, masques et photos
+  multiples sans aucune photo réelle.
 - Écarts connus et non bloquants : `AXE_CONNUS` et `FOCUS_CONNUS` dans `e2e_public.py`, déclarés
   par règle et par élément, avec leur identifiant du registre. Les retirer une fois corrigés.

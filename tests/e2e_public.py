@@ -8,6 +8,8 @@ Usage : python3 tests/e2e_public.py <dossier_app>
 Variables : AXE (chemin d'axe.min.js), CHROME (navigateur, facultatif).
 
 Couvre : chargement et progression du moteur, CSP et absence d'appel externe,
+contrôle de qualité, masques, photos multiples, progression de l'analyse,
+confidentialité, âge estimé et images simulées (v2.1, visages synthétiques),
 axe-core WCAG A/AA (4 onglets, thèmes clair et sombre), largeur téléphone, focus
 au clavier, entrées aux limites, stockage local, service worker et hors ligne.
 """
@@ -25,14 +27,16 @@ results = []
 connus = []  # écarts connus et suivis au registre, non bloquants
 
 # Politique attendue, identique à tests/garde_fous.sh : toute différence échoue.
-CSP_ATTENDUE = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "
+CSP_ATTENDUE = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; "
                 "img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; "
                 "manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
 
 # Écarts connus, déclarés finement : (règle axe, sélecteurs concernés) et éléments sans contour de focus.
-AXE_CONNUS = {"label-content-name-mismatch": ({'button[aria-label="Choisir la photo A"]', 'button[aria-label="Choisir la photo B"]',
-                                                'button[aria-label="Choisir la photo C"]'}, "AdF-011")}
-FOCUS_CONNUS = ({"name0", "name1", "name2"}, "AdF-012")
+# v2.1 : AdF-011 et AdF-012 corrigés, plus aucun écart connu.
+AXE_CONNUS = {}
+FOCUS_CONNUS = (set(), "")
+# Visage synthétique dessiné à la volée (aucune photo réelle, aucune empreinte enregistrée).
+FAKE = open(os.path.join(HERE, "visage_synthetique.js")).read()
 
 
 def make_fixtures():
@@ -112,6 +116,8 @@ with sync_playwright() as p:
     # Toute violation de CSP pendant les tests est comptée.
     ctx.add_init_script("window.__csp=[];document.addEventListener('securitypolicyviolation',e=>window.__csp.push(e.violatedDirective+' '+e.blockedURI));")
 
+    page.add_init_script("""window.__prog=[];new MutationObserver(()=>{for(const e of document.querySelectorAll('.prog:not([hidden]) .pstep'))
+      if(e.textContent&&!window.__prog.includes(e.textContent)) window.__prog.push(e.textContent);}).observe(document,{subtree:true,childList:true,characterData:true,attributes:true});""")
     page.add_init_script("""window.__steps=[];new MutationObserver(()=>{const t=document.body&&document.body.innerText||'';
       for(const l of t.split('\\n')) if(/Chargement|Initialisation|Préparation/.test(l)&&!window.__steps.includes(l.trim())) window.__steps.push(l.trim().slice(0,80));})
       .observe(document,{subtree:true,childList:true,characterData:true});""")
@@ -197,6 +203,82 @@ with sync_playwright() as p:
         check(f"Entrée limite {f} → message clair, appli intacte", ok, " ".join(t.split())[:90])
         if page.is_visible(".slot[data-i='0'] .x"):
             page.click(".slot[data-i='0'] .x")
+
+    # Progression de l'analyse (CU6) et annulation
+    prog = page.evaluate("window.__prog")
+    check("Analyse : progression par étapes nommées", any("Étape" in t for t in prog), prog[:4])
+    page.set_input_files("#file0", os.path.join(FIX, "geante.jpg"))
+    page.wait_for_selector(".slot[data-i='0'] .prog:not([hidden]) .pcancel", timeout=5000)
+    page.click(".slot[data-i='0'] .pcancel")
+    page.wait_for_timeout(400)
+    st = page.evaluate("[AirDeFamille.slots[0].status, !!document.querySelector('.slot[data-i=\"0\"] .prog:not([hidden])')]")
+    check("Analyse : annulation possible, la photo est retirée", st == ["empty", False], st)
+    srs = page.inner_text("#toasts")
+    check("Analyse : annulation annoncée (zone de messages lue par le lecteur d'écran)", "annulée" in srs, " ".join(srs.split())[:80])
+    check("Analyse : le focus reste dans l'emplacement après annulation", page.evaluate("!!document.activeElement.closest('.slot')"), page.evaluate("document.activeElement.className"))
+
+    # Lot 1 avec visages synthétiques
+    page.evaluate(FAKE)
+    page.evaluate("""async () => { const A = window.AirDeFamille;
+      const a = __fakeFace(1, {age: 40, family: 1}), b = __fakeFace(2, {age: 12, family: 1, sharp: 2});
+      await A.putCanvas(A.slots[0], a.canvas, {name: 'Paul', age: 40, det: a.det});
+      await A.putCanvas(A.slots[1], b.canvas, {name: 'Léa', det: b.det}); }""")
+    page.wait_for_timeout(400)
+    check("Résultats affichés (styles calculés sans 'unsafe-inline')", page.is_visible("#results") and page.evaluate("getComputedStyle(document.querySelector('.g-mark')).left") != "auto",
+          page.evaluate("getComputedStyle(document.querySelector('.g-mark')).left"))
+    gb = page.inner_text(".slot[data-i='1'] .gatebox") if page.locator(".slot[data-i='1'] .gatebox").count() else ""
+    check("Contrôle de qualité : photo floue → « à reprendre » avec la raison", "floue" in gb, " ".join(gb.split()))
+    check("Contrôle de qualité : photo correcte acceptée", page.locator(".slot[data-i='0'] .gatebox").count() == 0)
+    page.evaluate("""async () => { const A = window.AirDeFamille; const z = __fakeFace(5, {age: 40, zigzag: true});
+      await A.putCanvas(A.slots[2], z.canvas, {name: 'Zoé', age: 40, det: z.det}); }""")
+    page.wait_for_timeout(300)
+    gz = page.inner_text(".slot[data-i='2'] .gatebox") if page.locator(".slot[data-i='2'] .gatebox").count() else ""
+    check("Contrôle de qualité : repères mal placés (contour irrégulier) → « à reprendre » (AdF-027)", "repères mal placés" in gz, " ".join(gz.split()))
+    page.click(".slot[data-i='2'] .x")
+    page.wait_for_timeout(200)
+    for scheme in ["light", "dark"]:
+        page.emulate_media(color_scheme=scheme)
+        run_axe(page, f"résultats et contrôle de qualité / {scheme}")
+    page.emulate_media(color_scheme="light")
+    page.click(".slot[data-i='1'] [data-act=keep]")
+    page.wait_for_timeout(200)
+    kept = page.inner_text(".slot[data-i='1'] .chips")
+    check("Contrôle de qualité : « Garder » laisse la photo et le signale", "Gardée malgré" in kept and "Résultat moins sûr" in page.inner_text("#scoreCard"))
+    notes = page.inner_text("#scoreCard")
+    check("Âge estimé signalé, avec accès au champ âge (AdF-021)", "Âge estimé pour Léa" in notes)
+    page.click("#scoreCard [data-age]")
+    check("Le lien « Indiquer l'âge réel » place le focus dans le champ âge", page.evaluate("document.activeElement.id") == "age1")
+    page.click(".slot[data-i='0'] [data-act=check]")
+    page.wait_for_timeout(200)
+    check("Masques : fenêtre ouverte, focus à l'intérieur", page.is_visible("#maskSheet") and page.evaluate("!!document.activeElement.closest('#maskSheet')"))
+    run_axe(page, "fenêtre des masques")
+    page.check("#maskList input[data-k=beard]")
+    page.click("#maskGo")
+    page.wait_for_timeout(300)
+    wa = page.inner_text(".slot[data-i='0'] .chips")
+    check("Masques : barbe confirmée → prise en compte et signalée", "Barbe" in wa and "Masques vérifiés" in wa, " ".join(wa.split())[:120])
+    page.evaluate("async () => { const A = window.AirDeFamille; const e = __fakeFace(3, {age: 41, family: 1}); await A.addExtra(A.slots[0], null, e.det); }")
+    page.wait_for_timeout(300)
+    check("Photos multiples : « 2 photos utilisées » et note sous le score", "2 photos utilisées" in page.inner_text(".slot[data-i='0'] .chips") and "2 photos combinées" in page.inner_text("#scoreCard"))
+    page.click(".slot[data-i='0'] [data-act=less]")
+    page.wait_for_timeout(200)
+    check("Photos multiples : retrait des ajouts", "photos utilisées" not in page.inner_text(".slot[data-i='0'] .chips"))
+    page.click("#privacyBtn")
+    page.wait_for_timeout(200)
+    pv = page.inner_text("#privacySheet")
+    check("Confidentialité : fenêtre accessible depuis l'accueil (AdF-003)", page.is_visible("#privacySheet") and "biométriques" in pv and "GitHub Pages" in pv)
+    run_axe(page, "fenêtre de confidentialité")
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+    check("Confidentialité : Échap ferme et rend le focus", not page.is_visible("#privacySheet") and page.evaluate("document.activeElement.id") == "privacyBtn")
+    page.click("#tab-fusion")
+    page.wait_for_timeout(1500)
+    cap = page.inner_text("#fuCapM") if page.is_visible("#fuCapM") else ""
+    check("Fusion : mention « Image simulée » (AdF-024)", "Image simulée" in cap, cap)
+    page.click("#tab-comparer")
+    for i in (1, 0):
+        page.click(f".slot[data-i='{i}'] .x")
+    page.wait_for_timeout(200)
 
     # Stockage local : rien par défaut
     ls = page.evaluate("Object.keys(localStorage)")

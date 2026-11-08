@@ -3,16 +3,41 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
-## Non publié — dépôt
+## [v2.1.0] — 2026-11-08
 
-Application inchangée : le code publié reste celui de la v2.0.0, le cache hors ligne n'est pas renouvelé.
+Lot 1 du cadrage « prise de vue guidée et analyse » : améliorations sans caméra.
+
+- Ajout : contrôle de qualité de chaque photo (CU3) : photo floue, trop sombre, trop petite,
+  visage tourné, yeux mi-clos ou lunettes → « Photo à reprendre » avec la raison, choix
+  « Autre photo » ou « Garder » (une photo gardée est signalée sous le score). Seuils calibrés
+  sur une banque privée, sans faux rejet sur les photos d'origine.
+- Ajout : repères mal placés détectés (contour du visage irrégulier, typique d'une photo bougée)
+  et avertissement quand l'impression globale est élevée mais les traits très bas (AdF-027,
+  constaté par un test réel).
+- Ajout : jusqu'à 3 photos par personne dans Comparer (CU4), combinées en mémoire et pondérées
+  par leur qualité ; aucune photo enregistrée.
+- Ajout : fenêtre « Vérifier les masques » (CU5) : lunettes, barbe, frange et cheveux sur les côtés
+  détectés sont affichés, confirmés ou corrigés ; le trait concerné compte moins.
+- Ajout : progression de l'analyse (CU6) : étapes nommées, temps restant, annonce au lecteur
+  d'écran, bouton Annuler.
+- Ajout : fenêtre « Confidentialité et mentions » accessible depuis le pied de page (AdF-003).
+- Ajout : âge estimé signalé sous le score, avec un lien vers le champ âge (AdF-021).
+- Ajout : mention « Image simulée » sur les images Vieillir et Fusion, dans Comparer et sur
+  l'image de partage (AdF-024).
+- Sécurité : CSP sans `'unsafe-inline'` ; styles dans `app.css`, styles calculés appliqués par le
+  CSSOM (AdF-010).
+- Accessibilité : nom accessible des boutons photo identique au texte visible (AdF-011), contour
+  de focus du champ Prénom (AdF-012).
+- Cache hors ligne renouvelé (`air-de-famille-2.1`), `app.css` ajouté.
+- Moteur : calcul du score inchangé (régression privée : 378 paires, écart max 0,000000).
+- Tests : 52 contrôles e2e publics (22 de plus), avec un visage synthétique dessiné à la volée.
+
+## Dépôt — 2026-11-08
 
 - Ajout : README, SECURITY.md, licences des composants tiers, modèle de ticket qui interdit les photos,
   liste à cocher des demandes de fusion.
 - Ajout : contrôles automatiques (garde-fous de confidentialité, empreintes du moteur et des modèles,
   contrôle de chaque commit, tests e2e publics sans photo réelle), contrôle avant commit.
-- Constats enregistrés, à corriger dans les sources : AdF-011 (nom accessible des boutons photo),
-  AdF-012 (focus du champ Prénom).
 
 ## [v2.0.0] — 2026-10-18
 

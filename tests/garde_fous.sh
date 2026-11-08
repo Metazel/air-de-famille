@@ -70,7 +70,7 @@ for f in index.html app.js sw.js manifest.webmanifest fonts/fonts.css; do
 done
 
 # CSP : comparée directive par directive à la politique attendue.
-attendue="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+attendue="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
 normaliser() { tr ';' '\n' | sed -E 's/^ +//; s/ +$//; s/ +/ /g' | grep -v '^$' | sort; }
 publiee=$(grep -oE 'http-equiv="Content-Security-Policy" content="[^"]*"' index.html | sed -E 's/.*content="([^"]*)"/\1/' || true)
 if [ -z "$publiee" ]; then
