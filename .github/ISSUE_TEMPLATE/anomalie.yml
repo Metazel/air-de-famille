@@ -1,0 +1,36 @@
+name: Signaler une anomalie
+description: Un problème de fonctionnement, d'affichage ou d'accessibilité.
+labels: [anomalie]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **N'ajoutez jamais de photo de visage, de capture contenant un visage ni de prénom réel.**
+        Les photos de personnes sont des données personnelles ; celles d'enfants demandent
+        l'accord de leurs parents. Décrivez le problème avec des mots.
+  - type: textarea
+    id: constat
+    attributes:
+      label: Ce qui se passe
+      description: Ce que vous avez fait, ce que vous attendiez, ce qui s'est produit.
+    validations:
+      required: true
+  - type: dropdown
+    id: ecran
+    attributes:
+      label: Écran concerné
+      options: [Comparer, Album, Vieillir, Fusion, Chargement ou installation, Autre]
+    validations:
+      required: true
+  - type: input
+    id: appareil
+    attributes:
+      label: Appareil et navigateur
+      placeholder: ex. Pixel 7, Android 15, Chrome 130, application installée
+  - type: checkboxes
+    id: confidentialite
+    attributes:
+      label: Confidentialité
+      options:
+        - label: Je n'ai joint aucune photo ni capture montrant un visage.
+          required: true
