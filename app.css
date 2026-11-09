@@ -329,3 +329,7 @@ input[type=range]{accent-color:var(--accent)}
 .camctl #camShot{flex-basis:100%;font-size:1.1rem;padding:14px}
 .camnocam{text-align:center}
 @media (prefers-reduced-motion:reduce){.camframe{transition:none}}
+.stable{background:var(--sunk);border-radius:var(--r);padding:10px 12px;margin:8px 0}
+.stablelist{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.stablelist li{display:flex;justify-content:space-between;gap:12px}
+.stablelist em{font-style:normal;font-size:.75rem;color:var(--muted)}

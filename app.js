@@ -2696,6 +2696,11 @@
   var activePair = null;
   var refIdx = 0;
   var lastRes = null;
+  var NO_GLOBAL_GAP = 30;
+  var STABLE = /* @__PURE__ */ new Set(["nez", "bouche", "yeux", "sourcils", "iris"]);
+  var noGlobal = (R) => R.ageGap > NO_GLOBAL_GAP;
+  var ageOf = (i) => slots[i].realAge ?? (slots[i].fused || slots[i].det)?.age;
+  var stableTraits = (R) => R.traits.filter((r) => r.sim != null && STABLE.has(r.t.id)).sort((x, y) => y.sim - x.sim);
   function renderResults() {
     const ok = slots.filter((s) => s.status === "ok");
     $("#empty").hidden = ok.length >= 2;
@@ -2712,7 +2717,7 @@
     if (!activePair || !res[activePair]) activePair = pairs[0].join("");
     $("#tabs").innerHTML = pairs.map(([a2, b2]) => {
       const k = `${a2}${b2}`, sel = k === activePair;
-      return `<button class="tab" role="tab" id="tab${k}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" aria-controls="pairPanel" data-k="${k}"><span class="pdots"><i data-css="background:var(${CVAR[a2]})"></i><i data-css="background:var(${CVAR[b2]})"></i></span>${nm(a2)} · ${nm(b2)}<span class="num">${Math.round(res[k].total)} %</span></button>`;
+      return `<button class="tab" role="tab" id="tab${k}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" aria-controls="pairPanel" data-k="${k}"><span class="pdots"><i data-css="background:var(${CVAR[a2]})"></i><i data-css="background:var(${CVAR[b2]})"></i></span>${nm(a2)} · ${nm(b2)}<span class="num">${noGlobal(res[k]) ? `<span aria-hidden="true">—</span><span class="sr-only">écart d'âge : pas de score global</span>` : `${Math.round(res[k].total)} %`}</span></button>`;
     }).join("");
     const [a, b] = activePair.split("").map(Number), R = res[activePair];
     lastRes = { a, b, R };
@@ -2739,6 +2744,7 @@
       <div class="g-labels" aria-hidden="true">${labels}</div></div>`;
   }
   function renderScore(a, b, R) {
+    if (noGlobal(R)) return renderNoGlobal(a, b, R);
     const valid = R.traits.filter((r) => r.sim != null && !r.t.tag).sort((x, y) => y.sim - x.sim);
     const top = valid.slice(0, 2).map((r) => r.t.name.toLowerCase()), low = valid[valid.length - 1];
     const [rl, rc] = relLabel(R.rel);
@@ -2757,6 +2763,25 @@
     <p class="hint">Ce n'est pas un test de parenté : une famille se situe souvent entre les deux zones, mais pas toujours.</p>
     <div class="actions"><button type="button" class="btn" id="copyBtn">Copier le résumé</button><button type="button" class="btn" id="shareBtn">Créer une image</button></div>`;
   }
+  function renderNoGlobal(a, b, R) {
+    const st = stableTraits(R), gap = Math.round(R.ageGap);
+    const old = (ageOf(a) ?? 0) >= (ageOf(b) ?? 0) ? a : b, young = old === a ? b : a;
+    const top = st.filter((r) => !r.t.tag).slice(0, 2).map((r) => r.t.name.toLowerCase());
+    const trio = slots.filter((s) => s.status === "ok").length >= 3;
+    $("#scoreCard").innerHTML = `
+    <span class="label">Ressemblance ${nm(a)} · ${nm(b)}</span>
+    <div class="big"><span class="level">Pas de score global</span></div>
+    <p class="summary"><strong>${gap} ans d'écart</strong> : trop pour un pourcentage global. Au-delà de ${NO_GLOBAL_GAP} ans, il ne distingue plus une famille de deux inconnus. Comparez plutôt ce qui change peu avec l'âge.</p>
+    <div class="stable"><span class="label">Traits stables avec l'âge</span>
+      <ul class="stablelist">${st.map((r) => `<li><span>${r.t.name}${r.t.tag ? ` <em>${r.t.tag}</em>` : ""}</span><b>${Math.round(r.sim)} %</b></li>`).join("") || "<li>Aucun trait stable mesurable sur ces photos.</li>"}</ul></div>
+    ${top.length ? `<p class="summary">Points communs les plus nets : <strong>${top.join("</strong> et <strong>")}</strong>.</p>` : ""}
+    <p class="hint">Forme du visage, écart des yeux, proportions et teint changent avec la croissance et l'âge : ils restent affichés plus bas, sans conclusion.</p>
+    <div class="relrow"><span class="chip bad">Fiabilité limitée : écart d'âge</span><span class="hint">Pour une vraie comparaison, ajoutez une photo de ${nm(old)} à l'âge de ${nm(young)} (photo ancienne).</span></div>
+    ${trio ? '<p><a class="linkbtn" href="#heritage">Voir qui a transmis quoi, trait par trait</a></p>' : ""}
+    ${notes(a, b, R)}
+    <p class="hint">Ce n'est pas un test de parenté.</p>
+    <div class="actions"><button type="button" class="btn" id="copyBtn">Copier le résumé</button><button type="button" class="btn" id="shareBtn">Créer une image</button></div>`;
+  }
   function notes(a, b, R) {
     const out = [];
     for (const i of [a, b]) {
@@ -2772,19 +2797,23 @@
     if (R.ia >= 80 && R.geo <= 25) out.push(`<li class="bad">Impression globale élevée (${Math.round(R.ia)} %) mais traits très bas (${Math.round(R.geo)} %) : les repères d'une photo sont sans doute mal placés (photo floue ou bougée ?). Vérifiez le contour superposé ou reprenez la photo.</li>`);
     const miss = [a, b].filter((i) => slots[i].realAge == null);
     if (miss.length) {
-      const near = Math.abs(R.ageGap - BIG_GAP) < 8;
-      out.push(`<li class="${R.bigGap || near ? "bad" : ""}">Âge ${miss.length > 1 ? "estimé pour les deux photos" : `estimé pour ${nm(miss[0])}`} : l'écart d'âge (${Math.round(R.ageGap)} ans) change la façon de calculer le score${R.bigGap || near ? ", et l'estimation peut se tromper de plus de 10 ans" : ""}. <button type="button" class="linkbtn" data-age="${miss[0]}">Indiquer l'âge réel</button></li>`);
+      const near = Math.abs(R.ageGap - BIG_GAP) < 8 || Math.abs(R.ageGap - NO_GLOBAL_GAP) < 8;
+      const what = noGlobal(R) || Math.abs(R.ageGap - NO_GLOBAL_GAP) < 8 ? "décide si un score global peut être affiché" : "change la façon de calculer le score";
+      out.push(`<li class="${R.bigGap || near ? "bad" : ""}">Âge ${miss.length > 1 ? "estimé pour les deux photos" : `estimé pour ${nm(miss[0])}`} : l'écart d'âge (${Math.round(R.ageGap)} ans) ${what}${R.bigGap || near ? ", et l'estimation peut se tromper de plus de 10 ans" : ""}. <button type="button" class="linkbtn" data-age="${miss[0]}">Indiquer l'âge réel</button></li>`);
     }
     return out.length ? `<ul class="notes-score">${out.join("")}</ul>` : "";
   }
   function summaryText() {
     if (!lastRes) return "";
-    const { a, b, R } = lastRes;
-    const lines = [
+    const { a, b, R } = lastRes, ng = noGlobal(R);
+    const lines = ng ? [
+      `Air de famille — ${slotName(slots[a])} / ${slotName(slots[b])} : pas de score global (${Math.round(R.ageGap)} ans d'écart)`,
+      "Fiabilité limitée : écart d'âge. Traits stables avec l'âge mis en avant ; pour comparer vraiment, utilisez une photo du parent au même âge."
+    ] : [
       `Air de famille — ${slotName(slots[a])} / ${slotName(slots[b])} : ${Math.round(R.total)} % (${level(R.total).toLowerCase()})`,
       `Impression globale ${Math.round(R.ia)} % · traits mesurés ${Math.round(R.geo)} % · fiabilité ${relLabel(R.rel)[0].toLowerCase()}`
     ];
-    for (const r of R.traits) lines.push(`- ${r.t.name} : ${r.sim == null ? r.lens ? "non mesurable (lunettes confirmées)" : "non mesurable" : `${Math.round(r.sim)} %`}`);
+    for (const r of R.traits) lines.push(`- ${r.t.name} : ${r.sim == null ? r.lens ? "non mesurable (lunettes confirmées)" : "non mesurable" : `${Math.round(r.sim)} %`}${ng && !STABLE.has(r.t.id) ? " (change avec l'âge)" : ""}`);
     if (slots[a].simulated || slots[b].simulated) lines.push("Contient une image simulée (vieillissement ou fusion).");
     lines.push("Analyse locale, simulation de ressemblance : pas un test de parenté.");
     return lines.join("\n");
@@ -2817,6 +2846,7 @@
     return who.length ? `lunettes confirmées (${who.join(" et ")})` : "lunettes confirmées sur une autre photo";
   }
   function renderTraits(a, b, R) {
+    const ng = noGlobal(R);
     const open = new Set($$("#traits details[open]").map((d) => d.dataset.id));
     const unit = (it) => it.u === "°" ? "°" : "";
     $("#traits").innerHTML = R.traits.map((r) => {
@@ -2842,7 +2872,7 @@
         if (r.rows.some((x) => x.it.u === "é")) body += '<p class="hint">Longueurs en écarts inter-yeux (centre à centre = 1).</p>';
       }
       return `<details class="trait" data-id="${t.id}"${open.has(t.id) ? " open" : ""}>
-      <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}${r.lens ? "<em>non mesurable : lunettes</em>" : ""}</span><span class="bar${na ? " na" : ""}"><b data-css="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
+      <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}${r.lens ? "<em>non mesurable : lunettes</em>" : ""}${ng && !STABLE.has(t.id) ? "<em>change avec l'âge</em>" : ""}</span><span class="bar${na ? " na" : ""}"><b data-css="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
       <div class="detail">${body}</div></details>`;
     }).join("");
   }
@@ -2942,16 +2972,22 @@
     sel.innerHTML = ok.map((s) => `<option value="${s.i}"${s.i === refIdx ? " selected" : ""}>${esc(slotName(s))}</option>`).join("");
     const [x, y] = ok.map((s) => s.i).filter((i) => i !== refIdx);
     const lensAll = lensAny(), RX = compare(record(slots[refIdx]), record(slots[x]), { lens: lensAll }), RY = compare(record(slots[refIdx]), record(slots[y]), { lens: lensAll });
-    $("#heritageIntro").innerHTML = `Pour chaque trait de <strong>${nm(refIdx)}</strong>, la barre penche vers le visage le plus proche.`;
+    const ng = noGlobal(RX) || noGlobal(RY);
+    const far = [[x, RX], [y, RY]].filter(([, R]) => noGlobal(R)).map(([i, R]) => `${nm(i)} (${Math.round(R.ageGap)} ans)`);
+    $("#heritageIntro").innerHTML = `Pour chaque trait de <strong>${nm(refIdx)}</strong>, la barre penche vers le visage le plus proche.${ng ? ` Écart d'âge de plus de ${NO_GLOBAL_GAP} ans avec ${far.join(" et ")} : seuls les traits stables avec l'âge sont départagés.` : ""}`;
     const rows = TRAITS.map((t, n) => {
       const sx = RX.traits[n].sim, sy = RY.traits[n].sim, name = `<span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}</span>`;
       if (sx == null || sy == null)
         return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"></div></div><span class="verdict muted">non mesurable${RX.traits[n].lens ? " (lunettes)" : ""}</span></div>`;
+      if (ng && !STABLE.has(t.id))
+        return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"></div><div class="hnums"><span>${Math.round(sx)} %</span><span>${Math.round(sy)} %</span></div></div><span class="verdict muted">change avec l'âge</span></div>`;
       const wx = sx / (sx + sy || 1) * 100;
       const v = Math.abs(sx - sy) < 6 ? '<span class="muted">à égalité</span>' : `<span data-css="text-decoration:underline 3px var(${CVAR[sx > sy ? x : y]});text-underline-offset:3px">côté ${nm(sx > sy ? x : y)}</span>`;
       return `<div class="hrow">${name}<div class="tugwrap"><div class="tug"><b data-css="width:${wx}%;background:var(${CVAR[x]})"></b><b data-css="flex:1;background:var(${CVAR[y]})"></b></div><div class="hnums"><span>${Math.round(sx)} %</span><span>${Math.round(sy)} %</span></div></div><span class="verdict">${v}</span></div>`;
     }).join("");
-    const lead = Math.abs(RX.total - RY.total) < 3 ? `${nm(refIdx)} ressemble autant à ${nm(x)} qu'à ${nm(y)}.` : `Au total, ${nm(refIdx)} ressemble davantage à <strong>${nm(RX.total > RY.total ? x : y)}</strong> (${Math.round(Math.max(RX.total, RY.total))} % contre ${Math.round(Math.min(RX.total, RY.total))} %).`;
+    const side = (n) => TRAITS[n] && STABLE.has(TRAITS[n].id) && RX.traits[n].sim != null && RY.traits[n].sim != null && Math.abs(RX.traits[n].sim - RY.traits[n].sim) >= 6 ? RX.traits[n].sim > RY.traits[n].sim ? x : y : null;
+    const cnt = (i) => TRAITS.filter((_, n) => side(n) === i).length;
+    const lead = ng ? (cnt(x) + cnt(y) ? `Sur les traits stables avec l'âge, ${nm(refIdx)} tient de <strong>${nm(x)}</strong> pour ${cnt(x)} trait${cnt(x) > 1 ? "s" : ""} et de <strong>${nm(y)}</strong> pour ${cnt(y)}.` : "Aucun trait stable avec l'âge ne départage les deux visages.") + " Pas de total : l'écart d'âge est trop grand." : Math.abs(RX.total - RY.total) < 3 ? `${nm(refIdx)} ressemble autant à ${nm(x)} qu'à ${nm(y)}.` : `Au total, ${nm(refIdx)} ressemble davantage à <strong>${nm(RX.total > RY.total ? x : y)}</strong> (${Math.round(Math.max(RX.total, RY.total))} % contre ${Math.round(Math.min(RX.total, RY.total))} %).`;
     $("#hrows").innerHTML = `${rows}<p class="summary" data-css="margin-top:10px">${lead}</p>`;
   }
   function shareCard() {
@@ -2986,13 +3022,16 @@
     face(slots[b], 790);
     g.fillStyle = C("--ink");
     g.font = '700 190px "Familjen Grotesk", system-ui, sans-serif';
-    g.fillText(`${Math.round(R.total)} %`, W / 2, 900);
+    const ng = noGlobal(R);
+    if (ng) g.font = '700 120px "Familjen Grotesk", system-ui, sans-serif';
+    g.fillText(ng ? `${Math.round(R.ageGap)} ans d'écart` : `${Math.round(R.total)} %`, W / 2, 900);
     g.fillStyle = C("--accent");
     g.font = '700 50px "Familjen Grotesk", system-ui, sans-serif';
-    g.fillText(`Ressemblance ${level(R.total).toLowerCase()}`, W / 2, 975);
-    const main = R.traits.filter((r) => r.sim != null && !r.t.tag);
+    g.fillText(ng ? "Traits stables avec l'âge" : `Ressemblance ${level(R.total).toLowerCase()}`, W / 2, 975);
+    const main = ng ? stableTraits(R) : R.traits.filter((r) => r.sim != null && !r.t.tag);
     const mentions = [];
     if (R.lens) mentions.push(["--muted", "500 28px", "Yeux non notés : lunettes confirmées"]);
+    if (ng) mentions.push(["--bad", "600 30px", main.length ? "Fiabilité limitée : écart d'âge, pas de score global" : "Fiabilité limitée : aucun trait stable mesurable"]);
     if (slots[a].simulated || slots[b].simulated) mentions.push(["--bad", "600 30px", "Contient une image simulée"]);
     const step2 = Math.min(46, (H - 1030 - 90 - mentions.length * 44) / Math.max(1, main.length));
     const bh = Math.min(22, step2 - 8), fs = Math.round(Math.min(32, step2 - 4));
@@ -3087,7 +3126,7 @@
   var keyOf = (name) => name.trim().replace(/\s+/g, " ").toLowerCase();
   var personOf = (f) => f.person ? album.people[keyOf(f.person)] : null;
   var birthOf = (name) => name ? album.people[keyOf(name)]?.birth || null : null;
-  function ageOf(f) {
+  function ageOf2(f) {
     const birth = personOf(f)?.birth;
     const fromDates = birth && f.date ? yearsBetween(birth, f.date) : null;
     if (fromDates != null) return { age: fromDates, src: "dates" };
@@ -3095,7 +3134,7 @@
     return { age: f.det.age, src: "estimé" };
   }
   var record2 = (f) => {
-    const a = ageOf(f);
+    const a = ageOf2(f);
     return { key: `a${f.id}:${f.det.id}`, det: f.det, age: a.src === "estimé" ? null : a.age };
   };
   function loadPeople() {
@@ -3197,7 +3236,7 @@
     const all = [];
     for (const f of P.faces)
       for (const g of Q.faces) {
-        const af = ageOf(f), ag = ageOf(g);
+        const af = ageOf2(f), ag = ageOf2(g);
         all.push({ f, g, af, ag, gap: Math.abs(af.age - ag.age) });
       }
     all.sort((x, y) => x.gap - y.gap);
@@ -3286,7 +3325,7 @@
   }
   function updateCard(card, f) {
     card.classList.toggle("untagged", !f.person);
-    const a = ageOf(f);
+    const a = ageOf2(f);
     const age = $(".aage", card);
     age.textContent = a.src === "estimé" ? `Âge estimé ≈ ${ageLabel(a.age, true)}` : `${ageLabel(a.age)} sur la photo${a.src === "dates" ? " (calculé)" : ""}`;
     age.classList.toggle("est", a.src === "estimé");
@@ -3316,7 +3355,7 @@
     $("#peopleList").innerHTML = Object.values(album.people).map((p) => `<option value="${esc(p.name)}">`).join("");
     const box = $("#people");
     box.innerHTML = rows.map((p) => {
-      const ages = p.faces.map((f) => ageOf(f).age).sort((x, y) => x - y);
+      const ages = p.faces.map((f) => ageOf2(f).age).sort((x, y) => x - y);
       const info = !ages.length ? '<button type="button" class="btn small" data-forget>Oublier</button>' : `${p.faces.length} photo${p.faces.length > 1 ? "s" : ""} · ${ages.length > 1 ? `${ageLabel(ages[0])} → ${ageLabel(ages[ages.length - 1])}` : ageLabel(ages[0])}`;
       return `<div class="person" data-k="${esc(p.key)}"><span class="pn">${esc(p.name)}</span>
       <label class="hint">Né(e) le <input type="date" value="${esc(album.people[p.key].birth || "")}" aria-label="Date de naissance de ${esc(p.name)}"></label>
@@ -3327,7 +3366,7 @@
         const k = e.target.closest(".person").dataset.k;
         album.people[k].birth = e.target.value;
         savePeople();
-        for (const f of album.faces) if (f.person && keyOf(f.person) === k) f.det = requalify(f.det, ageOf(f).age);
+        for (const f of album.faces) if (f.person && keyOf(f.person) === k) f.det = requalify(f.det, ageOf2(f).age);
         render();
         refreshAutoAges();
       })
@@ -3352,18 +3391,20 @@
     const body = ps.map(
       (p, i) => `<tr><th scope="row">${esc(p.name)}</th>${ps.map((q, j) => {
         if (i === j) return '<td><div class="cell self" aria-hidden="true">—</div></td>';
-        const r = S[`${i}-${j}`], v = Math.round(r.score), pct = Math.round(Math.max(0, Math.min(100, v)) * 0.85);
+        const r = S[`${i}-${j}`], ng = r.gap > NO_GLOBAL_GAP, v = Math.round(r.score), pct = ng ? 0 : Math.round(Math.max(0, Math.min(100, v)) * 0.85);
         const far = r.gap > 20, key = `${Math.min(i, j)}-${Math.max(i, j)}`;
         return `<td><button type="button" class="cell${pct > 50 ? " dark" : ""}${far ? " far" : ""}" data-css="--p:${pct}%" data-k="${key}" aria-pressed="${selectedCell === key}"
-      aria-label="${esc(p.name)} et ${esc(q.name)} : ${v} %, écart d'âge ${Math.round(r.gap)} ans"><b>${v}</b><small>Δ ${Math.round(r.gap)} an${Math.round(r.gap) > 1 ? "s" : ""}</small></button></td>`;
+      aria-label="${esc(p.name)} et ${esc(q.name)} : ${ng ? "pas de score, photos d'âges trop éloignés" : `${v} %`}, écart d'âge ${Math.round(r.gap)} ans"><b>${ng ? "—" : v}</b><small>Δ ${Math.round(r.gap)} an${Math.round(r.gap) > 1 ? "s" : ""}</small></button></td>`;
       }).join("")}</tr>`
     ).join("");
     $("#matrix").innerHTML = head + `<tbody>${body}</tbody>`;
     $("#nearest").innerHTML = ps.map((p, i) => {
       let best = null;
       ps.forEach((q, j) => {
-        if (i !== j && (!best || S[`${i}-${j}`].score > best.r.score)) best = { q, r: S[`${i}-${j}`] };
+        const r = S[`${i}-${j}`];
+        if (i !== j && r.gap <= NO_GLOBAL_GAP && (!best || r.score > best.r.score)) best = { q, r };
       });
+      if (!best) return `<li><strong>${esc(p.name)}</strong> : pas de comparaison possible, photos d'âges trop éloignés (plus de ${NO_GLOBAL_GAP} ans d'écart). Ajoutez des photos d'âges proches.</li>`;
       const note = best.r.gap > 20 ? " — écart d'âge important : ajoutez des photos d'âges proches" : "";
       return `<li><strong>${esc(p.name)}</strong> ressemble le plus à <strong>${esc(best.q.name)}</strong> (${Math.round(best.r.score)} %, photos à ${Math.round(best.r.gap)} an${Math.round(best.r.gap) > 1 ? "s" : ""} d'écart)${note}</li>`;
     }).join("");
@@ -3380,7 +3421,7 @@
     const [i, j] = selectedCell.split("-").map(Number), r = S[selectedCell];
     const items = r.chosen.map(
       (p, n) => `<div class="pair" data-n="${n}"><canvas data-side="f"></canvas><canvas data-side="g"></canvas>
-      <div class="pv"><b>${Math.round(p.R.total)} %</b><br>${esc(ps[i].name)} ${ageLabel(p.af.age, p.af.src === "estimé")}${p.af.src === "estimé" ? " (est.)" : ""}<br>${esc(ps[j].name)} ${ageLabel(p.ag.age, p.ag.src === "estimé")}${p.ag.src === "estimé" ? " (est.)" : ""}</div></div>`
+      <div class="pv"><b>${p.gap > NO_GLOBAL_GAP ? "Pas de score" : `${Math.round(p.R.total)} %`}</b><br>${esc(ps[i].name)} ${ageLabel(p.af.age, p.af.src === "estimé")}${p.af.src === "estimé" ? " (est.)" : ""}<br>${esc(ps[j].name)} ${ageLabel(p.ag.age, p.ag.src === "estimé")}${p.ag.src === "estimé" ? " (est.)" : ""}</div></div>`
     ).join("");
     box.innerHTML = `<h3 data-css="margin-top:14px">${esc(ps[i].name)} et ${esc(ps[j].name)} : photos comparées</h3><div class="pairs" data-css="margin-top:8px">${items}</div>
     <div class="actions" data-css="margin-top:10px"><button type="button" class="btn" id="pairOpen">Voir le détail trait par trait</button></div>`;
@@ -3397,7 +3438,7 @@
     });
     $("#pairOpen").addEventListener("click", () => {
       const best = r.chosen[0];
-      const to = (s, f) => putCanvas(s, f.crop, { name: f.person, age: ageOf(f).src === "estimé" ? null : ageOf(f).age, det: f.det });
+      const to = (s, f) => putCanvas(s, f.crop, { name: f.person, age: ageOf2(f).src === "estimé" ? null : ageOf2(f).age, det: f.det });
       to(slots[0], best.f);
       to(slots[1], best.g);
       if (slots[2].canvas) emit2("clear-slot", 2);
@@ -3405,7 +3446,7 @@
     });
   }
   var albumSources = () => album.faces.map((f) => {
-    const a = ageOf(f);
+    const a = ageOf2(f);
     return {
       id: `a${f.id}`,
       label: `Album · ${f.person || `visage ${f.id}`} (${a.src === "estimé" ? "≈ " : ""}${ageLabel(a.age, a.src === "estimé")})`,
