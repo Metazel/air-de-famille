@@ -320,6 +320,26 @@ with sync_playwright() as p:
     cap = page.inner_text("#fuCapM") if page.is_visible("#fuCapM") else ""
     check("Fusion : mention « Image simulée » (AdF-024)", "Image simulée" in cap, cap)
     page.click("#tab-comparer")
+    # Grand écart d'âge (AdF-038) : plus de score global au-delà de 30 ans, traits stables mis en avant
+    page.evaluate("""async () => { const A = window.AirDeFamille; const b = __fakeFace(2, {age: 8, family: 1});
+      await A.putCanvas(A.slots[1], b.canvas, {name: 'Léa', age: 8, det: b.det}); }""")
+    page.wait_for_timeout(400)
+    sc = page.inner_text("#scoreCard")
+    check("Écart d'âge > 30 ans : pas de score global, traits stables, fiabilité limitée (AdF-038)",
+          "pas de score global" in sc.lower() and "traits stables avec l'âge" in sc.lower() and "fiabilité limitée" in sc.lower() and "nez" in sc.lower() and page.locator("#scoreCard .gauge").count() == 0 and "%" not in page.inner_text("#tabs .num"), " ".join(sc.split())[:160])
+    check("Écart d'âge > 30 ans : traits qui changent avec l'âge signalés (AdF-038)", "change avec l'âge" in page.inner_text("#traits details[data-id=visage] summary") and "change avec l'âge" not in page.inner_text("#traits details[data-id=nez] summary"))
+    page.evaluate("""async () => { const A = window.AirDeFamille; const z = __fakeFace(6, {age: 30, family: 2});
+      await A.putCanvas(A.slots[2], z.canvas, {name: 'Zoé', age: 30, det: z.det}); }""")
+    page.wait_for_timeout(400)
+    page.select_option("#refSel", "1")
+    page.wait_for_timeout(300)
+    hr = page.inner_text("#heritage")
+    check("Héritage, une seule paire au-delà de 30 ans : paire nommée, traits stables seuls départagés, sans total (AdF-038)",
+          ("Sur les traits stables" in hr or "Aucun trait stable" in hr) and "avec Paul (32 ans)" in hr and "Zoé (" not in hr and "change avec l'âge" in hr and "Au total" not in hr, " ".join(hr.split())[:300])
+    check("Lien « qui a transmis quoi » depuis le score (3 photos)", page.locator("#scoreCard a[href='#heritage']").count() == 1)
+    run_axe(page, "grand écart d'âge, héritage (AdF-038)")
+    page.click(".slot[data-i='2'] .x")
+    page.wait_for_timeout(200)
     for i in (1, 0):
         page.click(f".slot[data-i='{i}'] .x")
     page.wait_for_timeout(200)

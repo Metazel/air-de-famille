@@ -3,6 +3,20 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.3.2] — 2026-11-09
+
+Grand écart d'âge (AdF-038), après l'essai parent-enfant de David.
+
+- Au-delà de 30 ans d'écart, plus de pourcentage global ni de verdict (« faible », etc.) : sur la
+  banque familiale, il ne distinguait plus une famille de deux inconnus. À la place : les traits
+  stables avec l'âge (nez, bouche, forme des yeux, sourcils, couleur des yeux), la fiabilité
+  « limitée : écart d'âge » et l'invitation à comparer avec une photo du parent au même âge.
+- Les traits qui changent avec l'âge (forme du visage, écart des yeux, proportions, teint) sont
+  signalés « change avec l'âge » ; l'héritage à 3 photos ne les départage plus et ne donne plus de
+  total dans ce cas.
+- Résumé copié et image de partage suivent la même règle. Calcul inchangé (affichage seulement).
+- Tests : 89 contrôles e2e publics.
+
 ## [v2.3.1] — 2026-11-09
 
 Correctif de la prise de vue guidée, après l'essai sur téléphone.
