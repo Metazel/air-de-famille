@@ -348,6 +348,25 @@ with sync_playwright() as p:
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, f = x >= 16 && x < 48 && y >= 60 && y < 100; d[i] = d[i+1] = d[i+2] = f ? 200 : 20; d[i+3] = 255; }
       return AirDeFamille.live.lumStats(new ImageData(d, w, h), { x: 80, y: 300, width: 160, height: 200 }, 64 / 320); }""")
     check("Guidage : lumière du visage et du fond mesurées au bon endroit en portrait (AdF-033)", abs(lum["face"] - lum["around"]) > 100 and lum["face"] > lum["around"], lum)
+    # Taille et position mesurées dans la zone visible de l'aperçu, comme le cercle (AdF-037)
+    vue = page.evaluate("""() => { const L = AirDeFamille.live, G = AirDeFamille.guide;
+      const det = (cx, cy, w) => { const p = Array.from({ length: 68 }, () => [cx, cy]);
+        p[0] = [cx - w / 2, cy]; p[16] = [cx + w / 2, cy]; p[30] = [cx, cy + w * 0.12];
+        for (let i = 36; i <= 41; i++) p[i] = [cx - w * 0.2, cy - w * 0.1]; for (let i = 42; i <= 47; i++) p[i] = [cx + w * 0.2, cy - w * 0.1];
+        p[51] = [cx, cy + w * 0.3]; p[57] = [cx, cy + w * 0.36];
+        return { box: { x: cx - w / 2, y: cy - w * 0.65, width: w, height: w * 1.3 }, pts: p }; };
+      const vis = (W, H, cw, ch) => { const k = Math.max(cw / W, ch / H), w = cw / k, h = ch / k; return { x: (W - w) / 2, y: (H - h) / 2, w, h }; };
+      const lum = { face: 120, around: 120, all: 120 };
+      const P = vis(320, 569, 300, 400), Lv = vis(320, 180, 300, 400);
+      const portrait = L.liveMeasure(det(160, 284, 0.44 * P.w), 320, 569, lum, P);
+      const paysage = L.liveMeasure(det(160, 90, 0.44 * Lv.w), 320, 180, lum, Lv);
+      const decale = L.liveMeasure(det(Lv.x + Lv.w * 0.8, 90, 0.44 * Lv.w), 320, 180, lum, Lv);
+      const debord = L.liveMeasure(det(160, 284, 0.55 * P.w), 320, 569, lum, P);
+      const pres = L.liveMeasure(det(160, 284, 0.62 * P.w), 320, 569, lum, P);
+      const loin = L.liveMeasure(det(160, 284, 0.26 * P.w), 320, 569, lum, P);
+      return { portrait: G(portrait).key, paysage: G(paysage).key, decaleCx: decale.cx, debord: G(debord).key, pres: G(pres).key, loin: G(loin).key }; }""")
+    check("Guidage : visage qui remplit le cercle accepté (portrait et paysage), « reculer » seulement nettement au-delà (AdF-037)", [vue["portrait"], vue["paysage"], vue["debord"], vue["pres"], vue["loin"]] == ["ok", "ok", "ok", "farther", "closer"], vue)
+    check("Guidage : décalage mesuré dans la zone visible de l'aperçu (AdF-037)", abs(vue["decaleCx"] - 0.3) < 0.01, vue["decaleCx"])
     # Fermeture pendant le chargement (AdF-031) : aucune caméra rallumée ensuite
     page.evaluate("""() => { window.__streams = []; const g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
       navigator.mediaDevices.getUserMedia = async (c) => { await new Promise((r) => setTimeout(r, window.__gumDelay || 0)); const st = await g(c); window.__streams.push(st); return st; }; }""")
@@ -367,7 +386,10 @@ with sync_playwright() as p:
     page.check("#camConsent")
     page.click("#camGo")
     attendre(page, "AirDeFamille.camState().open && AirDeFamille.camState().text.length > 0", 20000)
-    page.wait_for_timeout(1500)
+    try:
+        attendre(page, "AirDeFamille.camState().text.includes('visage')", 10000)
+    except Exception:
+        pass
     st = page.evaluate("AirDeFamille.camState()")
     check("Caméra : flux ouvert, guidage actif (petits modèles chargés), consigne affichée (aucun visage dans l'image simulée)", st["open"] and st["guided"] and "visage" in st["text"], st)
     run_axe(page, "prise de vue guidée, caméra")
@@ -375,6 +397,8 @@ with sync_playwright() as p:
     check("Caméra : voix coupable (WCAG 1.4.2)", page.get_attribute("#camVoice", "aria-pressed") == "false")
     check("Caméra : consigne copiée dans la zone lue par TalkBack quand la voix est coupée", page.wait_for_timeout(2500) is None and len(page.evaluate("document.querySelector('#camSay').textContent")) > 0)
     check("Caméra : choix d'une photo toujours proposé", page.is_visible("#camFile2"))
+    cercle = page.evaluate("(() => { const f = document.querySelector('#camFrame').getBoundingClientRect(), v = document.querySelector('#camVideo').getBoundingClientRect(); return [f.width / v.width, (f.left + f.width / 2 - v.left) / v.width, f.height / f.width, v.width / v.height]; })()")
+    check("Caméra : cercle à 44 % de la largeur visible, centré, aperçu 3:4 (AdF-037)", abs(cercle[0] - 0.44) < 0.02 and abs(cercle[1] - 0.5) < 0.01 and abs(cercle[2] - 1.36) < 0.03 and abs(cercle[3] - 0.75) < 0.02, cercle)
     # Arrière-plan (AdF-034) : caméra coupée, reprise par un geste
     page.evaluate("Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange'))")
     page.wait_for_timeout(200)

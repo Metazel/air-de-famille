@@ -3,6 +3,17 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.3.1] — 2026-11-09
+
+Correctif de la prise de vue guidée, après l'essai sur téléphone.
+
+- La voix ne demande plus de reculer quand le visage remplit le cercle (AdF-037) : position et
+  taille sont mesurées dans la partie de l'image visible à l'écran, comme le cercle. Le cercle
+  correspond à un visage à environ 40 cm ; « reculer » n'est demandé que nettement au-delà
+  (environ 30 cm, en deçà la perspective déforme le nez et les proportions).
+- Aperçu toujours au format 3:4, cercle ovale proportionné au visage.
+- Tests : 84 contrôles e2e publics (flux portrait et paysage, cercle mesuré à l'écran).
+
 ## [v2.3.0] — 2026-11-08
 
 Lot 2 du cadrage : prise de vue guidée (CU1, CU2, AdF-016).
