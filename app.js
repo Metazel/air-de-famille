@@ -1400,7 +1400,7 @@
   }
 
   // src/js/engine/guide.js
-  var GUIDE = { minLight: 60, backlight: 0.6, minSize: 0.3, maxSize: 0.62, maxOffX: 0.12, maxOffY: 0.14, maxYaw: 0.07, pitchLo: 0.38, pitchHi: 0.68, maxRoll: 8 };
+  var GUIDE = { minLight: 60, backlight: 0.6, minSize: 0.3, maxSize: 0.58, maxOffX: 0.12, maxOffY: 0.14, maxYaw: 0.07, pitchLo: 0.38, pitchHi: 0.68, maxRoll: 8 };
   function guide(m, mode2 = "self") {
     const G = GUIDE, self = mode2 === "self";
     if (!m || !m.face) return { key: "noface", ok: false, score: 0 };
@@ -1512,15 +1512,16 @@
     }
     return [x / (b - a + 1), y / (b - a + 1)];
   };
-  function liveMeasure(d, W, H, lum = null) {
+  function liveMeasure(d, W, H, lum = null, view = null) {
+    const V = view || { x: 0, y: 0, w: W, h: H };
     if (!d) return { face: false, light: lum?.all ?? null };
     const P = d.pts, b = d.box;
     const L = avg(P, 36, 41), R = avg(P, 42, 47), eyeY = (L[1] + R[1]) / 2, mouthY = (P[51][1] + P[57][1]) / 2;
     return {
       face: true,
-      cx: (b.x + b.width / 2) / W - 0.5,
-      cy: (b.y + b.height / 2) / H - 0.5,
-      size: b.width / Math.min(W, H),
+      cx: (b.x + b.width / 2 - V.x) / V.w - 0.5,
+      cy: (b.y + b.height / 2 - V.y) / V.h - 0.5,
+      size: b.width / Math.min(V.w, V.h),
       yaw: (P[30][0] - P[0][0]) / (P[16][0] - P[0][0] || 1) - 0.5,
       pitch: (P[30][1] - eyeY) / (mouthY - eyeY || 1),
       roll: Math.atan2(R[1] - L[1], R[0] - L[0]) * 180 / Math.PI,
@@ -1804,7 +1805,8 @@
         if (!alive(sess) || cam.stream !== stream) return;
         const sw = 64, sh = Math.round(64 * H / W);
         const lum = lumStats(scaled(g, W, H, sw, sh), d?.box, sw / W);
-        step(liveMeasure(d, W, H, lum), sess);
+        const view = visible(v, W, H);
+        if (view) step(liveMeasure(d, W, H, lum, view), sess);
       } catch (e) {
         console.error(e);
       }
@@ -1812,6 +1814,12 @@
     if (!alive(sess) || cam.stream !== stream) return;
     const spent = performance.now() - t0;
     cam.timer = setTimeout(() => loop(sess, stream), Math.max(83 - spent, spent * 0.5, 30));
+  }
+  function visible(v, W, H) {
+    const cw = v.clientWidth, ch = v.clientHeight;
+    if (!cw || !ch) return null;
+    const k = Math.max(cw / W, ch / H), w = cw / k, h = ch / k;
+    return { x: (W - w) / 2, y: (H - h) / 2, w, h };
   }
   var tiny = null;
   function scaled(g, W, H, sw, sh) {
