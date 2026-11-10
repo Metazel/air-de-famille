@@ -1536,40 +1536,46 @@
   var emit2 = (ev, data) => handlers[ev]?.forEach((fn) => fn(data));
   var engine = { ready: false };
   function toast(text, action = null, { ms = action ? 12e3 : 5e3, after = null } = {}) {
-    const el2 = document.createElement("div");
-    el2.className = "toast";
-    el2.setAttribute("role", "status");
+    const el22 = document.createElement("div");
+    el22.className = "toast";
+    el22.setAttribute("role", "status");
     const span = document.createElement("span");
     span.textContent = text;
-    el2.appendChild(span);
+    el22.appendChild(span);
     if (action) {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = action.label;
       b.addEventListener("click", () => {
         action.run();
-        el2.remove();
+        el22.remove();
       });
-      el2.appendChild(b);
+      el22.appendChild(b);
     }
-    $("#toasts").appendChild(el2);
+    $("#toasts").appendChild(el22);
     Promise.resolve(after).catch(() => {
-    }).then(() => setTimeout(() => el2.remove(), ms));
-    return el2;
+    }).then(() => setTimeout(() => el22.remove(), ms));
+    return el22;
   }
   var openSheet = null;
   var returnFocus = null;
-  function openDialog(el2, onClose) {
-    returnFocus = document.activeElement;
-    openSheet = { el: el2, onClose };
-    el2.hidden = false;
-    (el2.querySelector("[data-autofocus]") || el2.querySelector("[data-close]"))?.focus();
+  function openDialog(el22, onClose) {
+    if (openSheet && openSheet.el !== el22) {
+      const prev = openSheet;
+      openSheet = null;
+      prev.el.hidden = true;
+      prev.onClose?.();
+    } else returnFocus = document.activeElement;
+    openSheet = { el: el22, onClose };
+    el22.hidden = false;
+    (el22.querySelector("[data-autofocus]") || el22.querySelector("[data-close]"))?.focus();
   }
+  var dialogOpen = () => !!openSheet;
   function closeDialog() {
     if (!openSheet) return;
-    const { el: el2, onClose } = openSheet;
+    const { el: el22, onClose } = openSheet;
     openSheet = null;
-    el2.hidden = true;
+    el22.hidden = true;
     onClose?.();
     returnFocus?.focus?.();
   }
@@ -2764,20 +2770,20 @@
     <div class="actions"><button type="button" class="btn" id="copyBtn">Copier le résumé</button><button type="button" class="btn" id="shareBtn">Créer une image</button></div>`;
   }
   function renderNoGlobal(a, b, R) {
-    const st = stableTraits(R), gap = Math.round(R.ageGap);
+    const st = stableTraits(R), gap2 = Math.round(R.ageGap);
     const old = (ageOf(a) ?? 0) >= (ageOf(b) ?? 0) ? a : b, young = old === a ? b : a;
     const top = st.filter((r) => !r.t.tag).slice(0, 2).map((r) => r.t.name.toLowerCase());
-    const trio = slots.filter((s) => s.status === "ok").length >= 3;
+    const trio2 = slots.filter((s) => s.status === "ok").length >= 3;
     $("#scoreCard").innerHTML = `
     <span class="label">Ressemblance ${nm(a)} · ${nm(b)}</span>
     <div class="big"><span class="level">Pas de score global</span></div>
-    <p class="summary"><strong>${gap} ans d'écart</strong> : trop pour un pourcentage global. Au-delà de ${NO_GLOBAL_GAP} ans, il ne distingue plus une famille de deux inconnus. Comparez plutôt ce qui change peu avec l'âge.</p>
+    <p class="summary"><strong>${gap2} ans d'écart</strong> : trop pour un pourcentage global. Au-delà de ${NO_GLOBAL_GAP} ans, il ne distingue plus une famille de deux inconnus. Comparez plutôt ce qui change peu avec l'âge.</p>
     <div class="stable"><span class="label">Traits stables avec l'âge</span>
       <ul class="stablelist">${st.map((r) => `<li><span>${r.t.name}${r.t.tag ? ` <em>${r.t.tag}</em>` : ""}</span><b>${Math.round(r.sim)} %</b></li>`).join("") || "<li>Aucun trait stable mesurable sur ces photos.</li>"}</ul></div>
     ${top.length ? `<p class="summary">Points communs les plus nets : <strong>${top.join("</strong> et <strong>")}</strong>.</p>` : ""}
     <p class="hint">Forme du visage, écart des yeux, proportions et teint changent avec la croissance et l'âge : ils restent affichés plus bas, sans conclusion.</p>
     <div class="relrow"><span class="chip bad">Fiabilité limitée : écart d'âge</span><span class="hint">Pour une vraie comparaison, ajoutez une photo de ${nm(old)} à l'âge de ${nm(young)} (photo ancienne).</span></div>
-    ${trio ? '<p><a class="linkbtn" href="#heritage">Voir qui a transmis quoi, trait par trait</a></p>' : ""}
+    ${trio2 ? '<p><a class="linkbtn" href="#heritage">Voir qui a transmis quoi, trait par trait</a></p>' : ""}
     ${notes(a, b, R)}
     <p class="hint">Ce n'est pas un test de parenté.</p>
     <div class="actions"><button type="button" class="btn" id="copyBtn">Copier le résumé</button><button type="button" class="btn" id="shareBtn">Créer une image</button></div>`;
@@ -3628,11 +3634,38 @@
   var getMeta = (key) => run("meta", "readonly", (s) => s.get(key));
   var setMeta = (key, value) => run("meta", "readwrite", (s) => s.put(value, key));
   var listItems = () => run("items", "readonly", (s) => s.getAll());
-  var addItem = (item) => run("items", "readwrite", (s) => s.add(item));
+  var chan = typeof BroadcastChannel === "function" ? new BroadcastChannel("adf-base") : null;
+  var notify = () => {
+    try {
+      chan?.postMessage("changed");
+    } catch {
+    }
+  };
+  var onBaseChanged = (fn) => chan && chan.addEventListener("message", () => fn());
+  async function addItem(item) {
+    const id = await run("items", "readwrite", (s) => s.add(item));
+    notify();
+    return id;
+  }
+  async function updateIfExists(item) {
+    let found = false;
+    await run("items", "readwrite", (s) => {
+      const r = s.get(item.id);
+      r.onsuccess = () => {
+        if (r.result) {
+          found = true;
+          s.put(item);
+        }
+      };
+    });
+    if (found) notify();
+    return found;
+  }
   async function deleteIds(ids) {
     await run("items", "readwrite", (s) => {
       for (const id of ids) s.delete(id);
     });
+    notify();
   }
   async function wipeBase() {
     if (dbp) {
@@ -3676,16 +3709,21 @@
     if (s) s.textContent = t;
   };
   var count = (items = base.items) => {
-    const people2 = new Set(items.map((i) => keyOf2(i.person)));
-    return `${people2.size} personne${people2.size > 1 ? "s" : ""}, ${items.length} photo${items.length > 1 ? "s" : ""}`;
+    const people2 = new Set(items.map((i) => keyOf2(i.person))), iris = items.filter((i) => i.kind === "iris").length, faces = items.length - iris;
+    return `${people2.size} personne${people2.size > 1 ? "s" : ""}, ${faces} photo${faces > 1 ? "s" : ""}${iris ? `, ${iris} iris` : ""}`;
+  };
+  var IRIS_EYE = { G: "œil gauche", D: "œil droit" };
+  var countOf = (items) => {
+    const iris = items.filter((i) => i.kind === "iris").length, faces = items.length - iris;
+    return [faces ? `${faces} photo${faces > 1 ? "s" : ""}` : "", iris ? `${iris} iris` : ""].filter(Boolean).join(", ");
   };
   var months = (iso) => Math.max(1, Math.round((Date.now() - Date.parse(iso)) / (30.44 * 864e5)));
-  function twoStep(btn, label, run3) {
+  function twoStep(btn, label, run4) {
     if (btn.dataset.armed) {
       if (Date.now() - Number(btn.dataset.at) < MIN_MS) return;
       clearTimeout(Number(btn.dataset.armed));
       disarm(btn);
-      run3();
+      run4();
       return;
     }
     btn.dataset.text = btn.textContent;
@@ -3705,11 +3743,18 @@
     else btn.removeAttribute("aria-label");
     btn.classList.remove("danger");
   }
+  var reloadSeq = 0;
   async function reload() {
+    const my = ++reloadSeq;
+    let items, include;
     try {
-      base.items = base.on ? await listItems() : [];
-      base.include = base.on ? await getMeta("include") || {} : {};
+      items = base.on ? await listItems() : [];
+      include = base.on ? await getMeta("include") || {} : {};
+      if (my !== reloadSeq) return;
+      base.items = items;
+      base.include = include;
     } catch (e) {
+      if (my !== reloadSeq) return;
       console.warn(e);
       base.on = false;
       base.items = [];
@@ -3719,12 +3764,14 @@
     for (const f of album.faces) if (f.baseRef && !refs.has(f.baseRef)) delete f.baseRef;
     setBaseView({ on: base.on });
     renderCard();
+    emit2("base");
   }
+  var refreshBase = () => reload();
   function renderCard() {
     $("#baseOff").hidden = base.on;
     $("#baseOnBox").hidden = !base.on;
     if (!base.on) return;
-    $("#baseInfo").textContent = base.items.length ? `Sur ce téléphone : ${count()}.` : "Votre base est vide : gardez des photos nommées de l'album.";
+    $("#baseInfo").textContent = base.items.length ? `Sur ce téléphone : ${count()}.` : "Votre base est vide : gardez des photos nommées de l'album, ou des iris depuis l'onglet Iris.";
     $("#basePersist").hidden = base.persisted;
     const pend = album.faces.filter((f) => f.person && !f.baseRef);
     $("#baseSaveAll").disabled = !pend.length;
@@ -3741,7 +3788,7 @@
     if (!created) await setMeta("created", created = (/* @__PURE__ */ new Date()).toISOString());
     const reminded = await getMeta("reminded") || created;
     const yearly = Date.now() - Date.parse(reminded) >= YEAR;
-    $("#baseBarTxt").textContent = yearly ? `Votre base contient ${base.items.length} photo${base.items.length > 1 ? "s" : ""} depuis ${months(created)} mois : garder ou supprimer ?` : `Base trouvée sur ce téléphone : ${count()}.`;
+    $("#baseBarTxt").textContent = yearly ? `Votre base contient ${countOf(base.items)} depuis ${months(created)} mois : garder ou supprimer ?` : `Base trouvée sur ce téléphone : ${count()}.`;
     $("#baseKeep").hidden = !yearly;
     $("#baseUse").hidden = yearly;
     $("#baseBar").hidden = false;
@@ -3867,7 +3914,7 @@
       emit2("mode", "album");
       $("#albumAdd").focus();
       if (!todo.length) {
-        toast(base.items.length ? "Rien de nouveau à charger depuis la base." : "La base est vide.");
+        toast(!base.items.length ? "La base est vide." : !base.items.some((i) => i.kind === "face") ? "Votre base ne contient que des iris : ouvrez l'onglet Iris, puis « Depuis ma base »." : "Rien de nouveau à charger depuis la base.");
         return;
       }
       const gen = base.gen;
@@ -3916,14 +3963,14 @@
     $("#manageInfo").textContent = base.items.length ? `${count()} sur ce téléphone. Désinstaller l'application ou effacer les données du site supprime aussi la base.` : "La base est vide.";
     const box = $("#manageList");
     box.innerHTML = [...groups].map(([k, g]) => `<div class="mperson" data-k="${esc(k)}">
-      <div class="mhead"><strong>${esc(g.name)}</strong><span class="hint">${g.items.length} photo${g.items.length > 1 ? "s" : ""}</span>
-        <label class="check"><input type="checkbox" class="minc"${base.include[k] === false ? "" : " checked"}> Charger ${esc(g.name)} dans l'album</label>
+      <div class="mhead"><strong>${esc(g.name)}</strong><span class="hint">${countOf(g.items)}</span>
+        ${g.items.some((i) => i.kind === "face") ? `<label class="check"><input type="checkbox" class="minc"${base.include[k] === false ? "" : " checked"}> Charger ${esc(g.name)} dans l'album</label>` : ""}
         <button type="button" class="btn small mdelp">Supprimer ${esc(g.name)}</button></div>
-      <div class="mthumbs">${g.items.map((it) => `<div class="mthumb" data-id="${it.id}"><canvas width="72" height="72" role="img" aria-label="Photo de ${esc(g.name)}${it.date ? `, ${esc(it.date)}` : it.typed != null ? `, ${esc(ageLabel(it.typed))}` : ""}"></canvas><button type="button" class="x" aria-label="Supprimer cette photo de ${esc(g.name)}">✕</button></div>`).join("")}</div></div>`).join("");
-    for (const el2 of $$(".mthumb", box)) {
-      const it = base.items.find((i) => String(i.id) === el2.dataset.id);
+      <div class="mthumbs">${g.items.map((it) => `<div class="mthumb" data-id="${it.id}"><canvas width="72" height="72" role="img" aria-label="${it.kind === "iris" ? `Iris de ${esc(g.name)}${IRIS_EYE[it.eye] ? `, ${IRIS_EYE[it.eye]}` : ""}` : `Photo de ${esc(g.name)}${it.date ? `, ${esc(it.date)}` : it.typed != null ? `, ${esc(ageLabel(it.typed))}` : ""}`}"></canvas><button type="button" class="x" aria-label="Supprimer ${it.kind === "iris" ? "cet iris" : "cette photo"} de ${esc(g.name)}">✕</button></div>`).join("")}</div></div>`).join("");
+    for (const el3 of $$(".mthumb", box)) {
+      const it = base.items.find((i) => String(i.id) === el3.dataset.id);
       try {
-        const bmp = await createImageBitmap(it.jpeg), cv = $("canvas", el2), g = cv.getContext("2d"), s = Math.min(bmp.width, bmp.height);
+        const bmp = await createImageBitmap(it.jpeg), cv = $("canvas", el3), g = cv.getContext("2d"), s = Math.min(bmp.width, bmp.height);
         g.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 72, 72);
       } catch {
       }
@@ -3953,6 +4000,13 @@
     (nextFocus && $(nextFocus) || $("#manageList .x") || $("#manageSheet [data-close]"))?.focus();
   }
   function initBase() {
+    onBaseChanged(() => {
+      if (!base.on) return;
+      reload().then(() => {
+        if (!$("#manageSheet").hidden) renderManage();
+      }).catch(() => {
+      });
+    });
     onBaseClosed(() => {
       base.gen++;
       baseExists().then((yes) => {
@@ -3995,7 +4049,7 @@
       if (x) {
         const th = x.closest(".mthumb"), id = Number(th.dataset.id), who = th.closest(".mperson").querySelector("strong").textContent;
         const next = th.nextElementSibling || th.previousElementSibling;
-        twoStep(x, { text: `Confirmer la suppression de cette photo de ${who}`, short: "✕" }, () => deleteFrom([id], "Photo", next ? `.mthumb[data-id="${next.dataset.id}"] .x` : null));
+        twoStep(x, { text: `Confirmer la suppression de ${x.getAttribute("aria-label").replace(/^Supprimer /, "")}`, short: "✕" }, () => deleteFrom([id], "Photo", next ? `.mthumb[data-id="${next.dataset.id}"] .x` : null));
       } else if (p) {
         const k = p.closest(".mperson").dataset.k;
         const ids = base.items.filter((i) => keyOf2(i.person) === k).map((i) => i.id);
@@ -4277,8 +4331,1938 @@
     refresh22();
   }
 
+  // src/js/engine/iris/img.js
+  var refl = (i, n) => {
+    if (n === 1) return 0;
+    while (i < 0 || i >= n) i = i < 0 ? -i : 2 * n - 2 - i;
+    return i;
+  };
+  function gray(img) {
+    const { width: w, height: h, data: d } = img, out = new Float32Array(w * h);
+    for (let i = 0, j = 0; i < out.length; i++, j += 4) out[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+    return out;
+  }
+  function resize(img, nw, nh, win = null) {
+    const { width: W, height: H, data: d } = img, out = new Uint8ClampedArray(nw * nh * 4);
+    const sx0 = win ? win.x : 0, sy0 = win ? win.y : 0, sw = win ? win.w : W, sh = win ? win.h : H;
+    const fx = sw / nw, fy = sh / nh;
+    if (fx > 1 || fy > 1) {
+      for (let y = 0; y < nh; y++) {
+        const ya = sy0 + y * fy, yb = ya + fy;
+        for (let x = 0; x < nw; x++) {
+          const xa = sx0 + x * fx, xb = xa + fx;
+          let r = 0, g = 0, b = 0, a = 0, n = 0;
+          for (let yy = Math.floor(ya); yy < Math.ceil(yb); yy++) {
+            const wy = Math.min(yb, yy + 1) - Math.max(ya, yy);
+            if (wy <= 0) continue;
+            for (let xx = Math.floor(xa); xx < Math.ceil(xb); xx++) {
+              const wx = Math.min(xb, xx + 1) - Math.max(xa, xx);
+              if (wx <= 0) continue;
+              const ww = wx * wy;
+              if (xx < 0 || yy < 0 || xx >= W || yy >= H) {
+                r += 128 * ww;
+                g += 128 * ww;
+                b += 128 * ww;
+                a += 255 * ww;
+              } else {
+                const j = (yy * W + xx) * 4;
+                r += d[j] * ww;
+                g += d[j + 1] * ww;
+                b += d[j + 2] * ww;
+                a += d[j + 3] * ww;
+              }
+              n += ww;
+            }
+          }
+          const o = (y * nw + x) * 4;
+          out[o] = r / n;
+          out[o + 1] = g / n;
+          out[o + 2] = b / n;
+          out[o + 3] = a / n;
+        }
+      }
+    } else {
+      for (let y = 0; y < nh; y++)
+        for (let x = 0; x < nw; x++) {
+          const o = (y * nw + x) * 4, px = sx0 + (x + 0.5) * fx - 0.5, py = sy0 + (y + 0.5) * fy - 0.5;
+          for (let c = 0; c < 4; c++) out[o + c] = sampleRGBA(img, px, py, c);
+        }
+    }
+    return { width: nw, height: nh, data: out };
+  }
+  function sampleRGBA(img, x, y, c) {
+    const { width: W, height: H, data: d } = img;
+    if (x < -0.5 || y < -0.5 || x > W - 0.5 || y > H - 0.5) return c === 3 ? 255 : 128;
+    const x0 = Math.max(0, Math.min(W - 1, Math.floor(x))), y0 = Math.max(0, Math.min(H - 1, Math.floor(y)));
+    const x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1), ax = Math.max(0, Math.min(1, x - x0)), ay = Math.max(0, Math.min(1, y - y0));
+    const p = (xx, yy) => d[(yy * W + xx) * 4 + c];
+    return (p(x0, y0) * (1 - ax) + p(x1, y0) * ax) * (1 - ay) + (p(x0, y1) * (1 - ax) + p(x1, y1) * ax) * ay;
+  }
+  function sample(f, w, h, x, y, border = 0) {
+    if (x < 0 || y < 0 || x > w - 1 || y > h - 1) return border;
+    const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1), ax = x - x0, ay = y - y0;
+    return (f[y0 * w + x0] * (1 - ax) + f[y0 * w + x1] * ax) * (1 - ay) + (f[y1 * w + x0] * (1 - ax) + f[y1 * w + x1] * ax) * ay;
+  }
+  function blur(f, w, h, sigma) {
+    const k = Math.max(3, Math.round(sigma * 8 + 1) | 1), r = k >> 1, ker = new Float32Array(k);
+    let s = 0;
+    for (let i = 0; i < k; i++) s += ker[i] = Math.exp(-((i - r) ** 2) / (2 * sigma * sigma));
+    for (let i = 0; i < k; i++) ker[i] /= s;
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        let a = 0;
+        for (let i = 0; i < k; i++) a += ker[i] * f[row + refl(x + i - r, w)];
+        tmp[row + x] = a;
+      }
+    }
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        let a = 0;
+        for (let i = 0; i < k; i++) a += ker[i] * tmp[refl(y + i - r, h) * w + x];
+        out[y * w + x] = a;
+      }
+    return out;
+  }
+  function blur1d(a, sigma) {
+    const n = a.length, k = Math.max(3, Math.round(sigma * 8 + 1) | 1), r = k >> 1, out = new Float32Array(n);
+    let s = 0;
+    const ker = [];
+    for (let i = 0; i < k; i++) s += ker[i] = Math.exp(-((i - r) ** 2) / (2 * sigma * sigma));
+    for (let x = 0; x < n; x++) {
+      let v = 0;
+      for (let i = 0; i < k; i++) v += ker[i] / s * a[refl(x + i - r, n)];
+      out[x] = v;
+    }
+    return out;
+  }
+  function sobel(f, w, h) {
+    const gx = new Float32Array(w * h), gy = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const ym = refl(y - 1, h) * w, y0 = y * w, yp = refl(y + 1, h) * w;
+      for (let x = 0; x < w; x++) {
+        const xm = refl(x - 1, w), xp = refl(x + 1, w);
+        gx[y0 + x] = f[ym + xp] - f[ym + xm] + 2 * (f[y0 + xp] - f[y0 + xm]) + f[yp + xp] - f[yp + xm];
+        gy[y0 + x] = f[yp + xm] - f[ym + xm] + 2 * (f[yp + x] - f[ym + x]) + f[yp + xp] - f[ym + xp];
+      }
+    }
+    return { gx, gy };
+  }
+  var lin = (c) => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  var fl = (t) => t > 8856e-6 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+  var LIN = new Float32Array(256).map((_, i) => lin(i));
+  function lab(r, g, b) {
+    const R = LIN[r | 0], G = LIN[g | 0], B = LIN[b | 0];
+    const X = (0.412453 * R + 0.35758 * G + 0.180423 * B) / 0.950456, Y = 0.212671 * R + 0.71516 * G + 0.072169 * B, Z = (0.019334 * R + 0.119193 * G + 0.950227 * B) / 1.088754;
+    const fx = fl(X), fy = fl(Y), fz = fl(Z), L = Y > 8856e-6 ? 116 * fy - 16 : 903.3 * Y;
+    return [L * 2.55, 500 * (fx - fy) + 128, 200 * (fy - fz) + 128];
+  }
+  function clahe(f, w, h, clip, tx, ty) {
+    const tw = Math.ceil(w / tx), th = Math.ceil(h / ty), area = tw * th, lim = Math.max(1, Math.floor(clip * area / 256));
+    const luts = [];
+    for (let j = 0; j < ty; j++)
+      for (let i = 0; i < tx; i++) {
+        const hist = new Int32Array(256);
+        for (let y = j * th; y < (j + 1) * th; y++)
+          for (let x = i * tw; x < (i + 1) * tw; x++) hist[Math.max(0, Math.min(255, Math.round(f[refl(y, h) * w + refl(x, w)])))]++;
+        let ex = 0;
+        for (let v = 0; v < 256; v++)
+          if (hist[v] > lim) {
+            ex += hist[v] - lim;
+            hist[v] = lim;
+          }
+        const add = Math.floor(ex / 256), rest = ex - add * 256;
+        for (let v = 0; v < 256; v++) hist[v] += add;
+        if (rest) for (let v = 0, step2 = Math.max(1, Math.floor(256 / rest)), n = 0; v < 256 && n < rest; v += step2, n++) hist[v]++;
+        const lut = new Float32Array(256);
+        let c = 0;
+        for (let v = 0; v < 256; v++) lut[v] = Math.min(255, Math.round((c += hist[v]) * 255 / area));
+        luts.push(lut);
+      }
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const gy = y / th - 0.5, j0 = Math.floor(gy), ay = gy - j0, ja = Math.max(0, j0), jb = Math.min(ty - 1, j0 + 1);
+      for (let x = 0; x < w; x++) {
+        const gx = x / tw - 0.5, i0 = Math.floor(gx), ax = gx - i0, ia = Math.max(0, i0), ib = Math.min(tx - 1, i0 + 1);
+        const v = Math.max(0, Math.min(255, Math.round(f[y * w + x])));
+        const top = luts[ja * tx + ia][v] * (1 - ax) + luts[ja * tx + ib][v] * ax, bot = luts[jb * tx + ia][v] * (1 - ax) + luts[jb * tx + ib][v] * ax;
+        out[y * w + x] = Math.round(top * (1 - ay) + bot * ay);
+      }
+    }
+    return out;
+  }
+  function minmax(m, w, h, r, isMax) {
+    const t = new Uint8Array(w * h), o = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        let v = isMax ? 0 : 1;
+        for (let i = -r; i <= r; i++) {
+          const xx = x + i;
+          const p = xx < 0 || xx >= w ? isMax ? 0 : 1 : m[y * w + xx];
+          if (isMax ? p : !p) {
+            v = isMax ? 1 : 0;
+            break;
+          }
+        }
+        t[y * w + x] = v;
+      }
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        let v = isMax ? 0 : 1;
+        for (let i = -r; i <= r; i++) {
+          const yy = y + i;
+          const p = yy < 0 || yy >= h ? isMax ? 0 : 1 : t[yy * w + x];
+          if (isMax ? p : !p) {
+            v = isMax ? 1 : 0;
+            break;
+          }
+        }
+        o[y * w + x] = v;
+      }
+    return o;
+  }
+  var openSquare = (m, w, h, k) => minmax(minmax(m, w, h, k >> 1, false), w, h, k >> 1, true);
+  function dilateDisk(m, w, h, r) {
+    const o = new Uint8Array(w * h), offs = [];
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + r) offs.push([dx, dy]);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        if (!m[y * w + x]) continue;
+        for (const [dx, dy] of offs) {
+          const xx = x + dx, yy = y + dy;
+          if (xx >= 0 && yy >= 0 && xx < w && yy < h) o[yy * w + xx] = 1;
+        }
+      }
+    return o;
+  }
+  function components(m, w, h, wantLargest = false) {
+    const lab2 = new Int32Array(w * h), stack = new Int32Array(w * h);
+    let n = 0, best = { area: 0, cx: 0, cy: 0, minx: 0, miny: 0, maxx: 0, maxy: 0 };
+    for (let s = 0; s < m.length; s++) {
+      if (!m[s] || lab2[s]) continue;
+      n++;
+      let sp = 0, area = 0, sx = 0, sy = 0, minx = w, miny = h, maxx = 0, maxy = 0;
+      stack[sp++] = s;
+      lab2[s] = n;
+      while (sp) {
+        const p = stack[--sp], x = p % w, y = (p - x) / w;
+        area++;
+        sx += x;
+        sy += y;
+        if (wantLargest) {
+          if (x < minx) minx = x;
+          if (x > maxx) maxx = x;
+          if (y < miny) miny = y;
+          if (y > maxy) maxy = y;
+        }
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+            const q = yy * w + xx;
+            if (m[q] && !lab2[q]) {
+              lab2[q] = n;
+              stack[sp++] = q;
+            }
+          }
+      }
+      if (wantLargest && area > best.area) best = { area, cx: sx / area, cy: sy / area, minx, miny, maxx, maxy };
+    }
+    return { n, best };
+  }
+  function inpaint(img, mask) {
+    const { width: w, height: h } = img, d = new Uint8ClampedArray(img.data), known = new Uint8Array(w * h);
+    for (let i = 0; i < known.length; i++) known[i] = mask[i] ? 0 : 1;
+    let front = [];
+    for (let i = 0; i < known.length; i++) if (!known[i]) front.push(i);
+    let guard = 0;
+    while (front.length && guard++ < 4e3) {
+      const next = [], done = [];
+      for (const p of front) {
+        const x = p % w, y = (p - x) / w;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+            const q = yy * w + xx;
+            if (!known[q]) continue;
+            const wt = 1 / (dx * dx + dy * dy);
+            r += d[q * 4] * wt;
+            g += d[q * 4 + 1] * wt;
+            b += d[q * 4 + 2] * wt;
+            n += wt;
+          }
+        if (n) {
+          d[p * 4] = r / n;
+          d[p * 4 + 1] = g / n;
+          d[p * 4 + 2] = b / n;
+          done.push(p);
+        } else next.push(p);
+      }
+      for (const p of done) known[p] = 1;
+      if (!done.length) break;
+      front = next;
+    }
+    return { width: w, height: h, data: d };
+  }
+  function fitCircle(pts, it = 5, tol = 2) {
+    let p = pts, cx = 0, cy = 0, r = 0;
+    for (let k = 0; k < it && p.length >= 3; k++) {
+      let sxx = 0, sxy = 0, syy = 0, sx = 0, sy = 0, sxz = 0, syz = 0, sz = 0;
+      const n = p.length;
+      for (const [x, y] of p) {
+        const z = x * x + y * y;
+        sxx += x * x;
+        sxy += x * y;
+        syy += y * y;
+        sx += x;
+        sy += y;
+        sxz += x * z;
+        syz += y * z;
+        sz += z;
+      }
+      const A = [[2 * sxx, 2 * sxy, sx], [2 * sxy, 2 * syy, sy], [2 * sx, 2 * sy, n]], B = [sxz, syz, sz];
+      const s = solve3(A, B);
+      if (!s) break;
+      [cx, cy] = s;
+      r = Math.sqrt(Math.max(s[2] + cx * cx + cy * cy, 1));
+      const res = p.map(([x, y]) => Math.abs(Math.hypot(x - cx, y - cy) - r)), med = [...res].sort((a, b) => a - b)[res.length >> 1];
+      p = p.filter((_, i) => res[i] < Math.max(tol * med, 1.5));
+    }
+    return { cx, cy, r, n: p.length };
+  }
+  function solve3(A, B) {
+    const m = A.map((row, i) => [...row, B[i]]);
+    for (let c = 0; c < 3; c++) {
+      let piv = c;
+      for (let r = c + 1; r < 3; r++) if (Math.abs(m[r][c]) > Math.abs(m[piv][c])) piv = r;
+      if (Math.abs(m[piv][c]) < 1e-9) return null;
+      [m[c], m[piv]] = [m[piv], m[c]];
+      for (let r = 0; r < 3; r++) {
+        if (r === c) continue;
+        const f = m[r][c] / m[c][c];
+        for (let k = c; k < 4; k++) m[r][k] -= f * m[c][k];
+      }
+    }
+    return [m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]];
+  }
+  var medianOf = (a) => {
+    const s = Float64Array.from(a).sort();
+    return s.length ? s[s.length >> 1] : NaN;
+  };
+
+  // src/js/engine/iris/segment.js
+  var NA = 360;
+  var WORK = 1e3;
+  var yieldNow = () => new Promise((r) => setTimeout(r, 0));
+  function ringMean(f, w, h, cx, cy, r, n = 40) {
+    let s = 0, k = 0;
+    for (let i = 0; i < n; i++) {
+      const half = i < n / 2, t = (half ? -Math.PI / 3 : 2 * Math.PI / 3) + i % (n / 2) / (n / 2) * (2 * Math.PI / 3);
+      const x = cx + r * Math.cos(t), y = cy + r * Math.sin(t);
+      if (x < 0 || y < 0 || x > w - 1 || y > h - 1) continue;
+      s += sample(f, w, h, x, y);
+      k++;
+    }
+    return k >= n * 0.35 ? s / k : NaN;
+  }
+  function bestCircle(f, w, h, xs, ys, rs) {
+    let best = { d: -Infinity, cx: 0, cy: 0, r: 0 };
+    for (const cy of ys)
+      for (const cx of xs) {
+        const m = rs.map((r) => ringMean(f, w, h, cx, cy, r));
+        for (let i = 2; i < rs.length - 2; i++) {
+          const d = (m[i + 1] + m[i + 2] - m[i - 1] - m[i - 2]) / 2;
+          if (d > best.d) best = { d, cx, cy, r: rs[i] };
+        }
+      }
+    return best;
+  }
+  var range = (a, b, s) => {
+    const o = [];
+    for (let v = a; v <= b + 1e-9; v += s) o.push(v);
+    return o;
+  };
+  function daugman(g, w, h) {
+    const k = 256 / Math.max(w, h), sw = Math.round(w * k), sh = Math.round(h * k);
+    const small = new Float32Array(sw * sh);
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) small[y * sw + x] = sample(g, w, h, x / k, y / k);
+    const sb = blur(small, sw, sh, 1.5), mn = Math.min(sw, sh);
+    const xs = range(sw * 0.12, sw * 0.88, 4), ys = range(sh * 0.12, sh * 0.88, 4);
+    let c1 = bestCircle(sb, sw, sh, xs, ys, range(mn * 0.06, mn * 0.62, 1.5));
+    const big = bestCircle(sb, sw, sh, range(c1.cx - c1.r * 0.25, c1.cx + c1.r * 0.25, 2), range(c1.cy - c1.r * 0.25, c1.cy + c1.r * 0.25, 2), range(c1.r * 1.6, Math.min(mn * 0.75, c1.r * 4.5), 1.5));
+    if (big.d > c1.d * 0.4 && isFinite(big.d)) c1 = big;
+    const r0 = c1.r / k, cx0 = c1.cx / k, cy0 = c1.cy / k, gb = blur(g, w, h, 2);
+    const fine = bestCircle(gb, w, h, range(cx0 - 4 / k, cx0 + 4 / k, 1.5), range(cy0 - 4 / k, cy0 + 4 / k, 1.5), range(r0 * 0.9, r0 * 1.1, 1));
+    return { ix: fine.cx, iy: fine.cy, R0: fine.r, contrast: fine.d };
+  }
+  function ray(f, w, h, cx, cy, t, r0, r1, border = 0) {
+    const n = Math.max(0, Math.floor(r1 - r0)), rs = new Float32Array(n), v = new Float32Array(n), c = Math.cos(t), s = Math.sin(t);
+    for (let i = 0; i < n; i++) {
+      const r = r0 + i;
+      rs[i] = r;
+      v[i] = sample(f, w, h, cx + r * c, cy + r * s, border);
+    }
+    return { rs, v };
+  }
+  function boxSmooth(v, k) {
+    const out = new Float32Array(v.length), r = k >> 1;
+    for (let i = 0; i < v.length; i++) {
+      let s = 0;
+      for (let j = i - r; j <= i + r; j++) if (j >= 0 && j < v.length) s += v[j];
+      out[i] = s / k;
+    }
+    return out;
+  }
+  function closeRing(ro, fallback) {
+    const idx = [];
+    for (let a = 0; a < NA; a++) if (isFinite(ro[a])) idx.push(a);
+    const f = new Float32Array(NA);
+    if (idx.length <= 10) return f.fill(fallback);
+    for (let a = 0; a < NA; a++) {
+      if (isFinite(ro[a])) {
+        f[a] = ro[a];
+        continue;
+      }
+      let lo = idx[idx.length - 1] - NA, hi = idx[0] + NA;
+      for (const j of idx) {
+        if (j < a) lo = j;
+        else {
+          hi = j;
+          break;
+        }
+      }
+      const vlo = ro[(lo + NA) % NA], vhi = ro[hi % NA], t = (a - lo) / (hi - lo);
+      f[a] = vlo + (vhi - vlo) * t;
+    }
+    const out = new Float32Array(NA);
+    for (let a = 0; a < NA; a++) {
+      const win = [];
+      for (let d = -6; d <= 6; d++) win.push(f[(a + d + NA) % NA]);
+      out[a] = medianOf(win);
+    }
+    return out;
+  }
+  async function segmentIris(img, { onStep = () => {
+  } } = {}) {
+    const W = img.width, H = img.height, k = WORK / Math.max(W, H), w = Math.round(W * k), h = Math.round(H * k);
+    onStep("Préparation de l'image");
+    const sm = resize(img, w, h), g = gray(sm);
+    await yieldNow();
+    let white = new Uint8Array(w * h);
+    for (let i = 0; i < white.length; i++) white[i] = g[i] >= 232 ? 1 : 0;
+    white = openSquare(white, w, h, 7);
+    let wf = 0;
+    for (const v of white) wf += v;
+    wf /= white.length;
+    let ix, iy, R0, mode2 = "photo";
+    if (wf >= 0.15) {
+      const nz = white.map((v) => 1 - v), { best: best2 } = components(nz, w, h, true);
+      const bw = best2.maxx - best2.minx + 1, bh = best2.maxy - best2.miny + 1, fill = best2.area / (Math.PI / 4 * bw * bh);
+      if (best2.area > w * h * 0.03 && bw / bh > 0.6 && bw / bh < 1.7 && fill > 0.6) {
+        mode2 = "detoure";
+        ix = best2.cx;
+        iy = best2.cy;
+        R0 = Math.sqrt(best2.area / Math.PI);
+      }
+    }
+    if (mode2 === "photo") {
+      onStep("Recherche du bord de l'iris");
+      const d = daugman(g, w, h);
+      if (!isFinite(d.R0) || d.contrast < 4) return null;
+      ({ ix, iy, R0 } = d);
+    }
+    await yieldNow();
+    onStep("Effacement des reflets");
+    let spec = new Uint8Array(w * h), nIn = 0, nSpec = 0;
+    const r7 = R0 * 0.7;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const inR = Math.hypot(x - ix, y - iy) < r7;
+        if (inR) nIn++;
+        if (inR && g[y * w + x] > 150) {
+          spec[y * w + x] = 1;
+          nSpec++;
+        }
+      }
+    if (nSpec > nIn * 0.25) {
+      for (let i = 0; i < spec.length; i++) spec[i] = spec[i] && g[i] > 215 ? 1 : 0;
+    }
+    spec = dilateDisk(spec, w, h, 4);
+    const clean = inpaint(sm, spec);
+    await yieldNow();
+    onStep("Recherche de la pupille");
+    const L = new Float32Array(w * h), C = new Float32Array(w * h);
+    for (let i = 0, j = 0; i < L.length; i++, j += 4) {
+      const [l, a, b] = lab(clean.data[j], clean.data[j + 1], clean.data[j + 2]);
+      L[i] = l;
+      C[i] = Math.hypot(a - 128, b - 128);
+    }
+    const LC = L.map((v, i) => v + 3 * C[i]);
+    let best = null;
+    for (const [name, ch] of [["clarté", L], ["clarté+couleur", LC], ["couleur", C]]) {
+      const chb = blur(ch, w, h, 2);
+      let cx = ix, cy = iy, rp2 = 0, nk = 0, pts = [], con = [];
+      for (let pass = 0; pass < 2; pass++) {
+        pts = [];
+        con = [];
+        for (let i = 0; i < 180; i++) {
+          const t = i / 180 * 2 * Math.PI, { rs, v: raw } = ray(chb, w, h, cx, cy, t, 2, r7);
+          if (rs.length < 12) continue;
+          const v = boxSmooth(raw, 9), n = v.length;
+          const lo = medianOf(v.subarray(0, Math.max(1, Math.floor(n * 0.12)))), hi = medianOf(v.subarray(Math.floor(n * 0.6)));
+          if (hi - lo < 6) continue;
+          for (let j = 4; j < n; j++)
+            if (v[j] > lo + 0.5 * (hi - lo)) {
+              pts.push([cx + rs[j] * Math.cos(t), cy + rs[j] * Math.sin(t)]);
+              con.push(hi - lo);
+              break;
+            }
+        }
+        if (pts.length < 40) break;
+        ({ cx, cy, r: rp2, n: nk } = fitCircle(pts));
+      }
+      if (pts.length >= 40) {
+        let s = 0, s2 = 0, n = 0;
+        for (let y = 0; y < h; y++)
+          for (let x = 0; x < w; x++)
+            if (Math.hypot(x - ix, y - iy) < R0 * 0.9) {
+              const v = ch[y * w + x];
+              s += v;
+              s2 += v * v;
+              n++;
+            }
+        const sd = Math.sqrt(Math.max(0, s2 / n - (s / n) ** 2)) + 1e-6, sc = nk / 180 * (medianOf(con) / sd);
+        if (!best || sc > best.sc) best = { sc, name, cx, cy, rp: rp2, nk };
+      }
+      await yieldNow();
+    }
+    if (!best || !(best.rp > 2) || best.rp > R0 * 0.85) return null;
+    const { cx: px, cy: py, rp } = best;
+    onStep("Suivi du bord de l'iris");
+    const ro = new Float32Array(NA).fill(NaN), seenMask = new Uint8Array(NA).fill(1);
+    if (mode2 === "detoure") {
+      const wf32 = Float32Array.from(white);
+      for (let a = 0; a < NA; a++) {
+        const t = a / NA * 2 * Math.PI, c = Math.cos(t), s = Math.sin(t);
+        let run4 = 0;
+        for (let r = rp * 1.5; r < R0 * 1.8; r++) {
+          const x = Math.round(px + r * c), y = Math.round(py + r * s);
+          const v = x < 0 || y < 0 || x >= w || y >= h ? -1 : wf32[y * w + x];
+          run4 = v === 1 ? run4 + 1 : 0;
+          if (run4 >= 12) {
+            ro[a] = r - 11;
+            break;
+          }
+        }
+      }
+    } else {
+      const gb = blur(g, w, h, 2), dmax = new Float32Array(NA), rbest = new Float32Array(NA);
+      for (let a = 0; a < NA; a++) {
+        const t = a / NA * 2 * Math.PI, c = Math.cos(t), s = Math.sin(t), ox = px - ix, oy = py - iy;
+        const bq = ox * c + oy * s, rexp = -bq + Math.sqrt(Math.max(0, bq * bq - (ox * ox + oy * oy - R0 * R0)));
+        const { rs, v } = ray(gb, w, h, px, py, t, Math.max(rp * 1.3, rexp * 0.88), rexp * 1.12, NaN);
+        let bd = -Infinity, br = NaN;
+        for (let j = 2; j < v.length - 2; j++) {
+          const d = (v[j + 1] + v[j + 2] - v[j - 1] - v[j - 2]) / 2;
+          if (d > bd) {
+            bd = d;
+            br = rs[j];
+          }
+        }
+        dmax[a] = isFinite(bd) ? bd : 0;
+        rbest[a] = br;
+      }
+      const side = [];
+      for (let a = 0; a < NA; a++) if (a < 45 || a >= 315 || a >= 135 && a < 225) side.push(dmax[a]);
+      const thr = 0.4 * medianOf(side);
+      for (let a = 0; a < NA; a++) if (dmax[a] > Math.max(thr, 2)) ro[a] = rbest[a];
+      const pts = [];
+      for (let a = 0; a < NA; a++) if (isFinite(ro[a])) pts.push([px + ro[a] * Math.cos(a / NA * 2 * Math.PI), py + ro[a] * Math.sin(a / NA * 2 * Math.PI)]);
+      if (pts.length >= 20) {
+        const fc = fitCircle(pts, 6, 1.8);
+        for (let a = 0; a < NA; a++) {
+          if (!isFinite(ro[a])) continue;
+          const x = px + ro[a] * Math.cos(a / NA * 2 * Math.PI), y = py + ro[a] * Math.sin(a / NA * 2 * Math.PI);
+          if (Math.abs(Math.hypot(x - fc.cx, y - fc.cy) - fc.r) > fc.r * 0.05) ro[a] = NaN;
+        }
+        for (let a = 0; a < NA; a++) {
+          if (isFinite(ro[a])) continue;
+          const t = a / NA * 2 * Math.PI, c = Math.cos(t), s2 = Math.sin(t), ox = px - fc.cx, oy = py - fc.cy, bq = ox * c + oy * s2;
+          ro[a] = -bq + Math.sqrt(Math.max(0, bq * bq - (ox * ox + oy * oy - fc.r * fc.r)));
+          seenMask[a] = 0;
+        }
+      }
+    }
+    let seen = 0;
+    for (let a = 0; a < NA; a++) if (isFinite(ro[a]) && seenMask[a]) seen++;
+    const roF = closeRing(ro, R0);
+    const out = new Float32Array(NA);
+    for (let a = 0; a < NA; a++) out[a] = roF[a] / k;
+    return { cx: px / k, cy: py / k, rp: rp / k, ro: out, mode: mode2, channel: best.name, seen: seen / NA, auto: true, limbus: { cx: ix / k, cy: iy / k, r: R0 / k } };
+  }
+  var irisRadius = (lm) => medianOf(lm.ro);
+  function validLandmarks(lm, W, H) {
+    if (!lm || !(lm.rp > 1) || !lm.ro || lm.ro.length !== NA || !isFinite(lm.cx) || !isFinite(lm.cy)) return false;
+    for (const v of lm.ro) if (!(isFinite(v) && v >= lm.rp * 1.2)) return false;
+    const ri = irisRadius(lm);
+    for (const v of lm.ro) if (v > ri * 1.6) return false;
+    return lm.cx > -ri && lm.cy > -ri && lm.cx < W + ri && lm.cy < H + ri;
+  }
+
+  // src/js/engine/iris/unwrap.js
+  var RN = 400;
+  var SHEET_A = 720;
+  var SHEET_R = 128;
+  function normalizeIris(img, lm) {
+    const ri = medianOf(lm.ro), s = RN / ri;
+    let rmax = 0;
+    for (const v of lm.ro) rmax = Math.max(rmax, v);
+    const S = Math.max(64, Math.round(2 * 1.12 * rmax * s)), half = S / (2 * s);
+    const N = resize(img, S, S, { x: lm.cx - half, y: lm.cy - half, w: 2 * half, h: 2 * half });
+    const lmN = { cx: S / 2, cy: S / 2, rp: lm.rp * s, ro: Float32Array.from(lm.ro, (v) => v * s) };
+    const g = gray(N), local = blur(g, S, S, 8), zone = new Uint8Array(S * S);
+    let spec = new Uint8Array(S * S), nIn = 0, nSp = 0;
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const dx = x - lmN.cx, dy = y - lmN.cy, i = y * S + x, r = Math.hypot(dx, dy), e = edgeAt(lmN.ro, Math.atan2(dy, dx));
+        if (r > e * 1.02) continue;
+        const inZone = r >= lmN.rp * 1.08 && r <= e * 0.97;
+        if (inZone) {
+          zone[i] = 1;
+          nIn++;
+        }
+        if (g[i] >= 230 || g[i] >= 200 && g[i] - local[i] > 40) {
+          spec[i] = 1;
+          if (inZone) nSp++;
+        }
+      }
+    if (nSp > 0.15 * nIn) {
+      const big = new Uint8Array(S * S);
+      for (let i = 0; i < big.length; i++) big[i] = g[i] >= 225 && (zone[i] || spec[i]) ? 1 : 0;
+      const keep = largeBlobs(big, S, S, Math.max(50, 5e-3 * nIn));
+      for (let i = 0; i < spec.length; i++) spec[i] = spec[i] && (g[i] >= 240 || keep[i]) ? 1 : 0;
+    }
+    spec = dilateDisk(spec, S, S, 3);
+    return { N: inpaint(N, spec), lmN, spec, scale: s };
+  }
+  function largeBlobs(m, w, h, minArea) {
+    const out = new Uint8Array(w * h), seen = new Uint8Array(w * h), stack = new Int32Array(w * h), comp = [];
+    for (let s = 0; s < m.length; s++) {
+      if (!m[s] || seen[s]) continue;
+      let sp = 0;
+      comp.length = 0;
+      stack[sp++] = s;
+      seen[s] = 1;
+      while (sp) {
+        const p = stack[--sp], x = p % w, y = (p - x) / w;
+        comp.push(p);
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+            const q = yy * w + xx;
+            if (m[q] && !seen[q]) {
+              seen[q] = 1;
+              stack[sp++] = q;
+            }
+          }
+      }
+      if (comp.length >= minArea) for (const p of comp) out[p] = 1;
+    }
+    return out;
+  }
+  function edgeAt(ro, t) {
+    const u = (t / (2 * Math.PI) * NA % NA + NA) % NA, a0 = Math.floor(u), a1 = (a0 + 1) % NA, f = u - a0;
+    return ro[a0] * (1 - f) + ro[a1] * f;
+  }
+  function unwrap(img, lm, { mirror = false, nA = SHEET_A, nR = SHEET_R } = {}) {
+    const out = new Uint8ClampedArray(nA * nR * 4);
+    for (let i = 0; i < nA; i++) {
+      const ti = i / nA * 2 * Math.PI, t = mirror ? Math.PI - ti : ti, c = Math.cos(t), s = Math.sin(t);
+      const rIn = lm.rp * 1.08, rOut = edgeAt(lm.ro, t) * 0.97;
+      for (let j = 0; j < nR; j++) {
+        const r = rIn + (rOut - rIn) * j / (nR - 1), x = lm.cx + r * c, y = lm.cy + r * s, o = (i * nR + j) * 4;
+        for (let k = 0; k < 3; k++) out[o + k] = sampleRGBA(img, x, y, k);
+        out[o + 3] = 255;
+      }
+    }
+    return { width: nR, height: nA, data: out };
+  }
+  function unwrapMask(mask, S, lm, { mirror = false, nA = SHEET_A, nR = SHEET_R } = {}) {
+    const out = new Uint8Array(nA * nR);
+    for (let i = 0; i < nA; i++) {
+      const ti = i / nA * 2 * Math.PI, t = mirror ? Math.PI - ti : ti, c = Math.cos(t), s = Math.sin(t);
+      const rIn = lm.rp * 1.08, rOut = edgeAt(lm.ro, t) * 0.97;
+      for (let j = 0; j < nR; j++) {
+        const r = rIn + (rOut - rIn) * j / (nR - 1), x = Math.round(lm.cx + r * c), y = Math.round(lm.cy + r * s);
+        out[i * nR + j] = x >= 0 && y >= 0 && x < S && y < S ? mask[y * S + x] : 0;
+      }
+    }
+    return out;
+  }
+  function bandImage(sheet) {
+    const { width: nR, height: nA, data: d } = sheet, out = new Uint8ClampedArray(nA * nR * 4);
+    for (let i = 0; i < nA; i++)
+      for (let j = 0; j < nR; j++) {
+        const s = (i * nR + j) * 4, o = (j * nA + i) * 4;
+        out[o] = d[s];
+        out[o + 1] = d[s + 1];
+        out[o + 2] = d[s + 2];
+        out[o + 3] = 255;
+      }
+    return { width: nA, height: nR, data: out };
+  }
+
+  // src/js/engine/iris/motifs.js
+  var yieldNow2 = () => new Promise((r) => setTimeout(r, 0));
+  var TEXTURE_GRAD_MIN = 1;
+  function countBlobs(m, w, h, minArea) {
+    const lab2 = new Int32Array(w * h), stack = new Int32Array(w * h);
+    let n = 0, kept = 0;
+    for (let s = 0; s < m.length; s++) {
+      if (!m[s] || lab2[s]) continue;
+      n++;
+      let sp = 0, area = 0;
+      stack[sp++] = s;
+      lab2[s] = n;
+      while (sp) {
+        const p = stack[--sp], x = p % w, y = (p - x) / w;
+        area++;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = (y + dy + h) % h;
+            if (xx < 0 || xx >= w) continue;
+            const q = yy * w + xx;
+            if (m[q] && !lab2[q]) {
+              lab2[q] = n;
+              stack[sp++] = q;
+            }
+          }
+      }
+      if (area >= minArea) kept++;
+    }
+    return kept;
+  }
+  async function irisMotifs(N, lmN, sheet, { mirror = false, spec = null, sheetSpec = null, stop: stop2 = () => false } = {}) {
+    const nR = sheet.width, nA = sheet.height, sg = gray(sheet), ok = new Uint8Array(nR * nA);
+    for (let y = 0; y < nA; y++)
+      for (let x = 0; x < nR; x++) {
+        const i = y * nR + x;
+        let refl2 = false;
+        if (sheetSpec) for (let d = -2; d <= 2 && !refl2; d++) refl2 = !!sheetSpec[(y + d + nA) % nA * nR + x];
+        ok[i] = sg[i] < 232 && sg[i] > 8 && !refl2 ? 1 : 0;
+      }
+    const cover = (x0, x1) => {
+      let n = 0;
+      for (let y = 0; y < nA; y++) for (let x = x0; x < x1; x++) n += ok[y * nR + x];
+      return n / ((x1 - x0) * nA);
+    };
+    const gry = clahe(sg, nR, nA, 2, 4, 8), { gx: sx, gy: sy } = sobel(gry, nR, nA);
+    const lapAbs = [], sgb = blur(sg, nR, nA, 1.5), { gx: bx, gy: by } = sobel(sgb, nR, nA);
+    let eTex = 0, nTex = 0;
+    for (let y = 1; y < nA - 1; y++)
+      for (let x = 1; x < nR - 1; x++) {
+        const i = y * nR + x;
+        if (!ok[i]) continue;
+        lapAbs.push(Math.abs(4 * sg[i] - sg[i - 1] - sg[i + 1] - sg[i - nR] - sg[i + nR]));
+        eTex += (bx[i] * bx[i] + by[i] * by[i]) / 64;
+        nTex++;
+      }
+    const texG = nTex ? Math.sqrt(eTex / nTex) : 0, noiseSd = lapAbs.length ? medianOf(lapAbs) / 0.6745 / Math.sqrt(20) : 0;
+    const texSNR = texG / Math.max(noiseSd, 0.5), plain = texG < TEXTURE_GRAD_MIN;
+    const share = (x0, x1) => {
+      let a = 0, b = 0, n = 0;
+      for (let y = 0; y < nA; y++)
+        for (let x = x0; x < x1; x++) {
+          const i = y * nR + x;
+          if (!ok[i]) continue;
+          a += sy[i] * sy[i];
+          b += sx[i] * sx[i];
+          n++;
+        }
+      return n && a + b > 0 ? a / (a + b) : NaN;
+    };
+    const third = Math.round(nR / 3), two = Math.round(2 * nR / 3);
+    const F = {}, why = {};
+    const put = (key, val, cov, reason, motif = true) => {
+      if (motif && plain) {
+        F[key] = null;
+        why[key] = "iris flou ou sans motif visible";
+      } else if (cov < 0.5 || !isFinite(val)) {
+        F[key] = null;
+        why[key] = reason;
+      } else F[key] = val;
+    };
+    put("filaments_coeur", share(0, third), cover(0, third), "cœur de l'iris peu visible");
+    put("filaments_milieu", share(third, two), cover(third, two), "milieu de l'iris peu visible");
+    put("sillons_bord", 1 - share(two, nR), cover(two, nR), "pourtour peu visible");
+    await yieldNow2();
+    if (stop2()) throw new Error("annulé");
+    const b1 = blur(gry, nR, nA, 1.5), b5 = blur(gry, nR, nA, 5), cm = new Uint8Array(nR * nA);
+    for (let i = 0; i < cm.length; i++) cm[i] = b1[i] - b5[i] < -12 && ok[i] ? 1 : 0;
+    const all = cover(0, nR);
+    put("cryptes_densite", countBlobs(cm, nR, nA, 6) / 7.2, all, "iris peu visible");
+    const prof = new Float32Array(nR);
+    let pm = 0, pn = 0;
+    for (let x = 0; x < nR; x++) {
+      let s = 0, n = 0;
+      for (let y = 0; y < nA; y++)
+        if (ok[y * nR + x]) {
+          s += gry[y * nR + x];
+          n++;
+        }
+      prof[x] = n ? s / n : NaN;
+      if (n) {
+        pm += prof[x];
+        pn++;
+      }
+    }
+    for (let x = 0; x < nR; x++) if (!isFinite(prof[x])) prof[x] = pn ? pm / pn : 0;
+    const ps = blur1d(prof, 2), grad = new Float32Array(nR);
+    for (let x = 1; x < nR - 1; x++) grad[x] = Math.abs((ps[x + 1] - ps[x - 1]) / 2);
+    const x0c = Math.round(nR * 0.15), x1c = Math.round(nR * 0.55);
+    let collar = x0c, gbest = -1;
+    for (let x = x0c; x <= x1c; x++)
+      if (grad[x] > gbest) {
+        gbest = grad[x];
+        collar = x;
+      }
+    const typical = medianOf(grad.subarray(4, nR - 4));
+    const sharp = gbest >= Math.max(0.6, 2 * typical);
+    put("collerette", sharp ? collar / nR : NaN, all, "collerette peu nette");
+    const Lin = [], Lout = [];
+    for (let y = 0; y < nA; y++)
+      for (let x = 3; x < nR - 3; x++) {
+        const i = y * nR + x;
+        if (!ok[i] || x >= third && x < two) continue;
+        const L = lab(sheet.data[i * 4], sheet.data[i * 4 + 1], sheet.data[i * 4 + 2])[0];
+        (x < third ? Lin : Lout).push(L);
+      }
+    const cIn = Lin.length / Math.max(1, (third - 3) * nA), cOut = Lout.length / Math.max(1, (nR - 3 - two) * nA);
+    put("clarte_coeur_bord", medianOf(Lout) - medianOf(Lin), Math.min(cIn, cOut), "cœur ou pourtour peu visible", false);
+    await yieldNow2();
+    if (stop2()) throw new Error("annulé");
+    const S = N.width, gN = gray(N), gc = clahe(gN, S, S, 2, 8, 8), gb = blur(gc, S, S, 1.5), { gx, gy } = sobel(gb, S, S);
+    const n2 = S * S, xx = new Float32Array(n2), yy = new Float32Array(n2), xy = new Float32Array(n2);
+    for (let i = 0; i < n2; i++) {
+      xx[i] = gx[i] * gx[i];
+      yy[i] = gy[i] * gy[i];
+      xy[i] = gx[i] * gy[i];
+    }
+    await yieldNow2();
+    if (stop2()) throw new Error("annulé");
+    const Jxx = blur(xx, S, S, 4), Jyy = blur(yy, S, S, 4), Jxy = blur(xy, S, S, 4);
+    await yieldNow2();
+    if (stop2()) throw new Error("annulé");
+    let tot = 0, wsp = 0, wci = 0, wra = 0, wpos = 0, wneg = 0, ringN = 0, ringExp = 0, eRing = 0, eMid = 0, nMid = 0;
+    const rin = lmN.rp * 1.08;
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const dx = x - lmN.cx, dy = y - lmN.cy, rpx = Math.hypot(dx, dy), ang = Math.atan2(dy, dx), rob = edgeAt(lmN.ro, ang);
+        const tf = (rpx - rin) / (rob * 0.95 - rin);
+        if (!(tf > 0 && tf < 1)) continue;
+        const i = y * S + x, trace = Jxx[i] + Jyy[i], lam = Math.sqrt((Jxx[i] - Jyy[i]) ** 2 + 4 * Jxy[i] ** 2), coh = (lam / (trace + 1e-6)) ** 2;
+        const e = coh * trace;
+        if (tf > 0.33 && tf < 0.66) {
+          eMid += e;
+          nMid++;
+        }
+        if (tf <= 0.66) continue;
+        ringExp++;
+        if (gN[i] >= 232 || spec?.[i]) continue;
+        ringN++;
+        eRing += e;
+        const tg = 0.5 * Math.atan2(2 * Jxy[i], Jxx[i] - Jyy[i]);
+        let al = ((tg - ang + Math.PI / 2) % Math.PI + Math.PI) % Math.PI - Math.PI / 2;
+        al = al * 180 / Math.PI;
+        const aa = Math.abs(al);
+        tot += e;
+        if (aa >= 25 && aa <= 65) {
+          wsp += e;
+          if (al > 0) wpos += e;
+          else wneg += e;
+        }
+        if (aa < 20) wci += e;
+        if (aa > 70) wra += e;
+      }
+    tot += 1e-6;
+    const ringE = ringN ? eRing / ringN : 0, midE = nMid ? eMid / nMid : 0;
+    const flat = ringN > 0 && (ringE < 0.15 * midE || ringE < 1);
+    put("spirales_bord", wsp / tot, flat ? 0 : ringN / Math.max(1, ringExp), flat ? "pourtour lissé ou retouché" : "pourtour peu visible");
+    if (flat && F.sillons_bord != null) {
+      F.sillons_bord = null;
+      why.sillons_bord = "pourtour lissé ou retouché";
+    }
+    const extra = {
+      cercles_bord: wci / tot,
+      rayons_bord: wra / tot,
+      sens_spirales: (wpos - wneg) / (wsp + 1e-6) * (mirror ? -1 : 1),
+      pupille_iris: lmN.rp / medianOf(lmN.ro),
+      texture: texG,
+      texture_snr: texSNR,
+      rayon_norm: RN
+    };
+    return { F, why, extra };
+  }
+
+  // src/js/engine/iris/cotes.js
+  var EGALITE = 0.1;
+  var MOTIFS = [
+    { key: "filaments_coeur", label: "Filaments du cœur", scale: 0.091, what: "les fines lignes qui partent de la pupille, dans le tiers intérieur de l'iris" },
+    { key: "filaments_milieu", label: "Filaments du milieu", scale: 0.19, what: "les lignes rayonnantes du tiers central" },
+    { key: "sillons_bord", label: "Sillons du pourtour", scale: 0.29, what: "les plis en cercle qui font le tour de l'iris, dans le tiers extérieur" },
+    { key: "spirales_bord", label: "Spirales du pourtour", scale: 0.33, what: "les motifs obliques du tiers extérieur, ni rayons ni cercles" },
+    { key: "cryptes_densite", label: "Cryptes", scale: 13, what: "les petits creux sombres en forme de losange, surtout près de la collerette" },
+    { key: "collerette", label: "Position de la collerette", scale: 0.14, what: "l'anneau en zigzag qui sépare le cœur du pourtour : plus ou moins loin de la pupille" },
+    { key: "clarte_coeur_bord", label: "Contraste cœur / pourtour", scale: 25, what: "la différence de clarté entre le cœur et le pourtour de l'iris" }
+  ];
+  function gap(m, fa, fb) {
+    const a = fa?.[m.key], b = fb?.[m.key];
+    if (a == null || b == null) return null;
+    return Math.abs(a - b) / m.scale;
+  }
+  function pairWords(d) {
+    if (d == null) return "non mesurable";
+    return d < 0.1 ? "très proches" : d < 0.25 ? "proches" : d < 0.5 ? "assez différents" : "différents";
+  }
+  function trio(fc, fa, fb) {
+    return MOTIFS.map((m) => {
+      const da = gap(m, fc, fa), db = gap(m, fc, fb);
+      if (da == null || db == null) return { key: m.key, side: null, da, db };
+      return { key: m.key, side: Math.abs(da - db) < EGALITE ? "egalite" : da < db ? "a" : "b", da, db };
+    });
+  }
+  function describe2(key, v) {
+    if (v == null) return "non mesurable";
+    const f2 = (x) => x.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+    switch (key) {
+      case "filaments_coeur":
+      case "filaments_milieu":
+        return `${v >= 0.6 ? "filaments marqués" : v >= 0.45 ? "filaments présents" : "peu de filaments"} (${f2(v)})`;
+      case "sillons_bord":
+        return `${v >= 0.55 ? "sillons marqués" : v >= 0.4 ? "quelques sillons" : "peu de sillons"} (${f2(v)})`;
+      case "spirales_bord":
+        return `${v >= 0.35 ? "spirales marquées" : v >= 0.2 ? "quelques spirales" : "peu de spirales"} (${f2(v)})`;
+      case "cryptes_densite":
+        return `${v >= 15 ? "nombreuses cryptes" : v >= 6 ? "quelques cryptes" : "peu de cryptes"} (${f2(v)})`;
+      case "collerette":
+        return `à ${Math.round(v * 100)} % du chemin entre la pupille et le bord`;
+      case "clarte_coeur_bord":
+        return v > 5 ? `cœur plus foncé que le pourtour (${f2(v)})` : v < -5 ? `cœur plus clair que le pourtour (${f2(v)})` : `cœur et pourtour de même clarté (${f2(v)})`;
+      default:
+        return f2(v);
+    }
+  }
+
+  // src/js/engine/iris/index.js
+  var MIN_IRIS_PX = 80;
+  var MIN_MEASURE_PX = 300;
+  var irisDiameter = (lm) => 2 * medianOf(lm.ro);
+  async function analyzeIris(img, lm, { mirror = false, onStep = () => {
+  }, stop: stop2 = () => false } = {}) {
+    const check = () => {
+      if (stop2()) throw new Error("annulé");
+    };
+    const d = irisDiameter(lm);
+    if (d < MIN_MEASURE_PX) {
+      const F = {}, why = {};
+      for (const k of ["filaments_coeur", "filaments_milieu", "sillons_bord", "cryptes_densite", "collerette", "clarte_coeur_bord", "spirales_bord"]) {
+        F[k] = null;
+        why[k] = `iris trop petit pour mesurer les motifs (${Math.round(d)} px de diamètre, minimum ${MIN_MEASURE_PX})`;
+      }
+      onStep("Déroulé de l'iris");
+      return { F, why, extra: {}, band: bandImage(unwrap(img, lm, { mirror })) };
+    }
+    onStep("Mise à l'échelle de l'iris");
+    const { N, lmN, spec } = normalizeIris(img, lm);
+    await new Promise((r) => setTimeout(r, 0));
+    check();
+    onStep("Déroulé de l'iris");
+    const sheet = unwrap(N, lmN, { mirror }), sheetSpec = unwrapMask(spec, N.width, lmN, { mirror });
+    check();
+    onStep("Mesure des motifs");
+    const m = await irisMotifs(N, lmN, sheet, { mirror, spec, sheetSpec, stop: stop2 });
+    return { ...m, band: bandImage(sheet) };
+  }
+  function previewBand(img, lm, { mirror = false } = {}) {
+    return bandImage(unwrap(img, lm, { mirror, nA: 360, nR: 64 }));
+  }
+  function irisCrop(img, lm, maxSide = 1200) {
+    let rmax = 0;
+    for (const v of lm.ro) rmax = Math.max(rmax, v);
+    const half = rmax * 1.06, side = 2 * half, S = Math.max(32, Math.min(maxSide, Math.round(side))), s = S / side;
+    const c = resize(img, S, S, { x: lm.cx - half, y: lm.cy - half, w: side, h: side });
+    const lc = { cx: S / 2, cy: S / 2, rp: lm.rp * s, ro: Float32Array.from(lm.ro, (v) => v * s) };
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const dx = x + 0.5 - lc.cx, dy = y + 0.5 - lc.cy;
+        const r = Math.hypot(dx, dy), o = (y * S + x) * 4;
+        const g = 0.299 * c.data[o] + 0.587 * c.data[o + 1] + 0.114 * c.data[o + 2];
+        if (r <= edgeAt(lc.ro, Math.atan2(dy, dx)) * 1.02 && r > lc.rp * 1.02 && g < 225) continue;
+        c.data[o] = c.data[o + 1] = c.data[o + 2] = 128;
+        c.data[o + 3] = 255;
+      }
+    return { img: c, lm: lc };
+  }
+  var packLandmarks = (lm) => ({ cx: +lm.cx.toFixed(2), cy: +lm.cy.toFixed(2), rp: +lm.rp.toFixed(2), ro: Array.from(lm.ro, (v) => +v.toFixed(2)), auto: !!lm.auto });
+  var unpackLandmarks = (o) => o && Array.isArray(o.ro) && o.ro.length === NA ? { cx: +o.cx, cy: +o.cy, rp: +o.rp, ro: Float32Array.from(o.ro, Number), auto: !!o.auto } : null;
+
+  // src/js/ui/iris.js
+  var MAX_SIDE = 2400;
+  var MAX_BYTES = 20 * 1024 * 1024;
+  var ROLES = ["La personne", "Un parent", "L'autre parent"];
+  var blank2 = (i) => ({ i, name: "", eye: "", src: null, img: null, lm: null, lmAuto: null, status: "empty", msg: "", warn: "", baseRef: null, gen: 0, cache: null });
+  var islots = [0, 1, 2].map(blank2);
+  var nameOf = (s) => {
+    const n = s.name.trim();
+    if (!n) return `Iris ${s.i + 1}`;
+    return islots.some((o) => o !== s && o.src && o.name.trim().toLowerCase() === n.toLowerCase()) ? `${n} (iris ${s.i + 1})` : n;
+  };
+  var EYE = { G: "œil gauche", D: "œil droit" };
+  var say3 = (t) => {
+    const r = $("#srStatus");
+    if (r) r.textContent = t;
+  };
+  var run3 = { gen: 0, busy: false, res: null };
+  function invalidate() {
+    if (run3.res && !run3.busy) $("#irisStatus").textContent = "Un iris a changé : relancez la comparaison.";
+    if (run3.busy) {
+      run3.gen++;
+      run3.busy = false;
+      $("#irisCancel").hidden = true;
+      $("#irisStatus").textContent = "Comparaison interrompue : un iris a changé.";
+      say3("Comparaison interrompue : un iris a changé.");
+    }
+    run3.res = null;
+    $("#irisResults").hidden = true;
+  }
+  function slotHtml(s) {
+    const n = s.i + 1;
+    return `<div class="islot" data-i="${s.i}">
+    <div class="ihead"><span class="badge">${n}</span><h3>${ROLES[s.i]}</h3></div>
+    <div class="imedia"><canvas width="240" height="240" hidden></canvas><p class="ph" aria-hidden="true">Iris ${n}</p></div>
+    <label class="ilabel">Prénom <input class="name" type="text" autocomplete="off" maxlength="40" data-f="name"></label>
+    <fieldset class="ieye"><legend>Œil photographié</legend>
+      <label class="check"><input type="radio" name="ieye${s.i}" value="G"> Gauche</label>
+      <label class="check"><input type="radio" name="ieye${s.i}" value="D"> Droit</label>
+    </fieldset>
+    <div class="iact">
+      <button type="button" class="btn small" data-act="pick" aria-label="Importer une photo, iris ${n}">Importer une photo</button>
+      <button type="button" class="btn small" data-act="fix" aria-label="Corriger les repères, iris ${n}" hidden>Corriger les repères</button>
+      <button type="button" class="btn small" data-act="frombase" aria-label="Depuis ma base, iris ${n}" hidden>Depuis ma base</button>
+      <button type="button" class="btn small" data-act="keep" aria-label="Garder dans ma base, iris ${n}" hidden>Garder dans ma base</button>
+      <button type="button" class="btn small" data-act="clear" aria-label="Retirer l'iris ${n}" hidden>Retirer</button>
+    </div>
+    <p class="hint istate"></p>
+    <input type="file" accept="image/*" hidden data-f="file">
+  </div>`;
+  }
+  var el2 = (s) => $(`.islot[data-i="${s.i}"]`);
+  var agreed = () => $("#irisAgree").checked;
+  function drawThumb(s) {
+    const cv = $("canvas", el2(s));
+    if (!s.src) {
+      cv.hidden = true;
+      return;
+    }
+    cv.hidden = false;
+    const g = cv.getContext("2d"), W = cv.width;
+    g.fillStyle = "#808080";
+    g.fillRect(0, 0, W, W);
+    if (!s.lm) {
+      const k = Math.min(W / s.src.width, W / s.src.height);
+      g.drawImage(s.src, (W - s.src.width * k) / 2, (W - s.src.height * k) / 2, s.src.width * k, s.src.height * k);
+    } else {
+      let rmax = 0;
+      for (const v of s.lm.ro) rmax = Math.max(rmax, v);
+      const half = rmax * 1.25, k = W / (2 * half);
+      g.drawImage(s.src, s.lm.cx - half, s.lm.cy - half, 2 * half, 2 * half, 0, 0, W, W);
+      drawMarks(g, s.lm, (x) => (x - (s.lm.cx - half)) * k, (y) => (y - (s.lm.cy - half)) * k, k);
+    }
+    cv.setAttribute("role", "img");
+    cv.setAttribute("aria-label", s.lm ? `Iris ${s.i + 1} : repères placés (pupille et bord de l'iris)` : `Iris ${s.i + 1} : photo sans repères`);
+  }
+  function drawMarks(g, lm, X, Y, k) {
+    const path = () => {
+      g.beginPath();
+      for (let a = 0; a <= NA; a += 2) {
+        const t = a / NA * 2 * Math.PI, r = edgeAt(lm.ro, t);
+        const x = X(lm.cx + r * Math.cos(t)), y = Y(lm.cy + r * Math.sin(t));
+        a ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.closePath();
+    };
+    const circle = () => {
+      g.beginPath();
+      g.arc(X(lm.cx), Y(lm.cy), lm.rp * k, 0, 2 * Math.PI);
+    };
+    for (const [w, c] of [[4, "rgba(0,0,0,.75)"], [2, "#fff"]]) {
+      g.lineWidth = w;
+      g.strokeStyle = c;
+      g.setLineDash([]);
+      path();
+      g.stroke();
+      g.setLineDash(w === 2 ? [6, 4] : []);
+      circle();
+      g.stroke();
+    }
+    g.setLineDash([]);
+  }
+  function renderSlot2(s) {
+    const e = el2(s);
+    if (!e) return;
+    const has = !!s.src;
+    $(".ph", e).hidden = has;
+    drawThumb(s);
+    const name = $("[data-f=name]", e);
+    if (document.activeElement !== name) name.value = s.name;
+    name.readOnly = !!s.baseRef;
+    if (s.baseRef) name.setAttribute("aria-describedby", "lockedHint");
+    else name.removeAttribute("aria-describedby");
+    for (const r of $$(`input[name=ieye${s.i}]`, e)) r.checked = r.value === s.eye;
+    e.dataset.status = s.status;
+    $("[data-act=pick]", e).disabled = !agreed() || s.status === "busy";
+    $("[data-act=fix]", e).hidden = !has || s.status === "busy";
+    $("[data-act=fix]", e).classList.toggle("primary", s.status === "tofix");
+    $("[data-act=clear]", e).hidden = !has;
+    const irisItems = base.on ? base.items.filter((i) => i.kind === "iris") : [];
+    $("[data-act=frombase]", e).hidden = !irisItems.length || s.status === "busy";
+    $("[data-act=frombase]", e).disabled = !agreed();
+    $("[data-act=keep]", e).hidden = !base.on || !s.lm || !!s.baseRef || s.status !== "ready";
+    $(".istate", e).textContent = s.baseRef ? `${s.msg ? s.msg + " " : ""}Gardé dans ma base.` : s.msg;
+    $(".istate", e).classList.toggle("warn", !!s.warn);
+    e.classList.toggle("filled", has);
+    updateGo();
+    emit2("iris");
+  }
+  function readyOf() {
+    return islots.filter((s) => s.lm && s.status === "ready");
+  }
+  function updateGo() {
+    const ready = readyOf(), need = [];
+    if (!agreed()) need.push("Cochez l'accord des personnes photographiées.");
+    for (const s of islots) if (s.status === "tofix") need.push(`Placez et validez les repères de ${nameOf(s)}.`);
+    if (ready.length < 2) need.push("Ajoutez au moins deux iris.");
+    for (const s of ready) if (!s.eye) need.push(`Indiquez l'œil (gauche ou droit) de ${nameOf(s)}.`);
+    $("#irisGo").disabled = !agreed() || run3.busy || ready.length < 2 || ready.some((s) => !s.eye);
+    $("#irisNeed").textContent = need.join(" ");
+    $("#irisNoBase").hidden = base.on;
+  }
+  async function setImage(s, canvas, { lm = null, name, eye, baseRef = null } = {}) {
+    s.gen++;
+    invalidate();
+    Object.assign(s, { src: canvas, img: ctx2d(canvas).getImageData(0, 0, canvas.width, canvas.height), lm: null, lmAuto: null, lmSmall: null, cache: null, msg: "", warn: "", baseRef });
+    if (name != null) s.name = name;
+    if (eye != null) s.eye = eye;
+    if (lm && validLandmarks(lm, canvas.width, canvas.height) && irisDiameter(lm) >= MIN_IRIS_PX) {
+      s.lm = lm;
+      s.status = "ready";
+      s.msg = "Repères repris de ma base." + smallNote(lm);
+      renderSlot2(s);
+      return;
+    }
+    if (lm) {
+      s.lm = validLandmarks(lm, canvas.width, canvas.height) ? lm : defaultLandmarks(s.img);
+      s.status = "tofix";
+      s.msg = "Repères de ma base à vérifier : « Corriger les repères », puis validez.";
+      s.warn = "1";
+      renderSlot2(s);
+      return;
+    }
+    await locate(s);
+  }
+  async function locate(s, { open: open2 = true } = {}) {
+    const gen = ++s.gen, t0 = performance.now();
+    s.status = "busy";
+    s.msg = "Repérage de l'iris…";
+    s.warn = "";
+    renderSlot2(s);
+    let lm = null;
+    try {
+      lm = await segmentIris(s.img, { onStep: (t) => gen === s.gen && ($(".istate", el2(s)).textContent = `${t}…`) });
+    } catch (e) {
+      console.error(e);
+    }
+    if (gen !== s.gen) return;
+    const secs = ((performance.now() - t0) / 1e3).toFixed(1).replace(".", ",");
+    if (!lm) {
+      s.status = "tofix";
+      s.lm = defaultLandmarks(s.img);
+      s.msg = "Iris non trouvé automatiquement : placez les repères (« Corriger les repères »), puis validez.";
+      s.warn = "1";
+      renderSlot2(s);
+      say3(`${nameOf(s)} : iris non trouvé, repères à placer à la main.`);
+      if (open2 && canAutoOpen()) openFix(s);
+      return;
+    }
+    const d = irisDiameter(lm);
+    if (d < MIN_IRIS_PX) {
+      s.status = "error";
+      s.lm = null;
+      s.lmSmall = lm;
+      s.msg = `Iris trop petit (${Math.round(d)} px de diamètre, minimum ${MIN_IRIS_PX}) : prenez la photo de plus près, ou corrigez les repères si le bord est mal placé.`;
+      s.warn = "1";
+      renderSlot2(s);
+      return;
+    }
+    s.lm = lm;
+    s.lmAuto = lm;
+    s.status = "ready";
+    s.msg = (lm.seen < 0.4 ? `Repérage incertain (bord de l'iris peu visible) : vérifiez les repères.` : `Iris repéré en ${secs} s.`) + smallNote(lm);
+    s.warn = lm.seen < 0.4 ? "1" : "";
+    renderSlot2(s);
+    say3(`${nameOf(s)} : ${s.msg}`);
+  }
+  var smallNote = (lm) => irisDiameter(lm) < MIN_MEASURE_PX ? ` Iris de moins de ${MIN_MEASURE_PX} px : comparaison à l'œil seulement, motifs non mesurés.` : "";
+  var canAutoOpen = () => !dialogOpen() && !$("#iris").hidden;
+  function defaultLandmarks(img) {
+    const m = Math.min(img.width, img.height), ri = m * 0.35;
+    return { cx: img.width / 2, cy: img.height / 2, rp: ri * 0.3, ro: new Float32Array(NA).fill(ri), auto: false };
+  }
+  async function loadFile(s, file) {
+    if (!file) return;
+    if (!agreed()) return toast("Cochez d'abord l'accord des personnes photographiées.");
+    if (!file.size) return toast("Fichier vide.");
+    if (file.size > MAX_BYTES) return toast("Photo trop lourde (plus de 20 Mo).");
+    if (file.type && !file.type.startsWith("image/")) return toast("Ce fichier n'est pas une image.");
+    let c;
+    const gen = ++s.gen;
+    try {
+      c = await decodeImage(file, MAX_SIDE);
+    } catch {
+      return toast("Image illisible par ce navigateur (format HEIC ?) : exportez-la en JPEG puis réessayez.");
+    }
+    if (gen !== s.gen) return;
+    if (c.width < 40 || c.height < 40) return toast("Image trop petite pour contenir un iris mesurable.");
+    await setImage(s, c, { baseRef: null });
+  }
+  function clearSlot2(s) {
+    Object.assign(s, blank2(s.i), { gen: s.gen + 1 });
+    invalidate();
+    renderSlot2(s);
+  }
+  function clearIris() {
+    islots.forEach(clearSlot2);
+  }
+  var irisHasContent = () => islots.some((s) => s.src);
+  var snapshotIris = () => islots.map((s) => ({ ...s }));
+  function restoreIris(snap) {
+    invalidate();
+    const refs = new Set(base.items.map((i) => i.ref));
+    snap.forEach((o, i) => {
+      const s = islots[i];
+      Object.assign(s, o, { gen: s.gen + 1, baseRef: o.baseRef && refs.has(o.baseRef) ? o.baseRef : null });
+      if (o.status === "busy" && s.img) locate(s, { open: false });
+    });
+    islots.forEach(renderSlot2);
+  }
+  var fix = { s: null, lm: null, sel: "c", half: 0, ox: 0, oy: 0, k: 1, drag: null };
+  var copyLm = (lm) => ({ cx: lm.cx, cy: lm.cy, rp: lm.rp, ro: Float32Array.from(lm.ro), auto: lm.auto });
+  function openFix(s) {
+    if (!s.src) return;
+    fix.s = s;
+    fix.lm = copyLm(s.lm || s.lmSmall || defaultLandmarks(s.img));
+    fix.errAt = 0;
+    let rmax = 0;
+    for (const v of fix.lm.ro) rmax = Math.max(rmax, v);
+    fix.half = Math.max(rmax * 1.45, 40);
+    fix.ox = fix.lm.cx - fix.half;
+    fix.oy = fix.lm.cy - fix.half;
+    $("#irisFixWho").textContent = ` : ${nameOf(s)}`;
+    $("#irisFixAuto").hidden = false;
+    selectHandle("c");
+    openDialog($("#irisFixSheet"));
+    drawFix();
+  }
+  function selectHandle(h) {
+    fix.sel = h;
+    for (const b of $$("#irisFixSel button")) b.setAttribute("aria-pressed", String(b.dataset.sel === h));
+    $("#irisPadMove").hidden = h !== "c";
+    $("#irisPadSize").hidden = h === "c";
+  }
+  var handlePos = (h, lm) => h === "c" ? [lm.cx, lm.cy] : h === "p" ? [lm.cx + lm.rp, lm.cy] : [lm.cx - edgeAt(lm.ro, Math.PI), lm.cy];
+  function drawFix() {
+    const cv = $("#irisFixCanvas"), W = cv.width, g = cv.getContext("2d"), lm = fix.lm;
+    fix.k = W / (2 * fix.half);
+    g.fillStyle = "#808080";
+    g.fillRect(0, 0, W, W);
+    g.drawImage(fix.s.src, fix.ox, fix.oy, 2 * fix.half, 2 * fix.half, 0, 0, W, W);
+    drawMarks(g, lm, (x) => (x - fix.ox) * fix.k, (y) => (y - fix.oy) * fix.k, fix.k);
+    for (const b of $$("#irisFixWrap .hdl")) {
+      const [x, y] = handlePos(b.dataset.h, lm);
+      b.style.left = `${(x - fix.ox) * fix.k / W * 100}%`;
+      b.style.top = `${(y - fix.oy) * fix.k / W * 100}%`;
+      b.setAttribute("aria-pressed", String(b.dataset.h === fix.sel));
+    }
+    paintBand();
+    announce();
+  }
+  var paintBand = debounce(() => {
+    if (!fix.s) return;
+    const b = previewBand(fix.s.img, fix.lm, { mirror: fix.s.eye === "G" }), cv = $("#irisFixBand");
+    cv.width = b.width;
+    cv.height = b.height;
+    cv.getContext("2d").putImageData(new ImageData(b.data, b.width, b.height), 0, 0);
+  }, 80);
+  var announce = debounce(() => {
+    if (!fix.s || performance.now() - (fix.errAt || 0) < 1500) return;
+    const ri = edgeAt(fix.lm.ro, Math.PI) || 1;
+    $("#irisFixVals").textContent = `Centre : ${Math.round(fix.lm.cx)}, ${Math.round(fix.lm.cy)}. Pupille : ${Math.round(2 * fix.lm.rp)} px de diamètre (${Math.round(fix.lm.rp / ri * 100)} % de l'iris). Iris : ${Math.round(2 * ri)} px de diamètre.`;
+  }, 300);
+  function applyMove(h, x, y) {
+    const lm = fix.lm;
+    if (h === "c") {
+      lm.cx = x;
+      lm.cy = y;
+    } else if (h === "p") {
+      let minR = Infinity;
+      for (const v of lm.ro) minR = Math.min(minR, v);
+      lm.rp = Math.max(2, Math.min(minR / 1.2 - 1, Math.hypot(x - lm.cx, y - lm.cy)));
+    } else {
+      const cur = edgeAt(lm.ro, Math.PI) || 1, want = Math.max(lm.rp * 1.25, Math.hypot(x - lm.cx, y - lm.cy)), f = want / cur;
+      for (let a = 0; a < NA; a++) lm.ro[a] *= f;
+    }
+    lm.auto = false;
+    drawFix();
+  }
+  function nudge(h, dx, dy, big, size = null) {
+    const step2 = Math.max(1, edgeAt(fix.lm.ro, Math.PI) / 120) * (big === true ? 10 : big === "btn" ? 4 : 1), lm = fix.lm;
+    if (h === "c") return applyMove("c", lm.cx + dx * step2, lm.cy + dy * step2);
+    const grow = size ?? (dy < 0 ? 1 : dy > 0 ? -1 : h === "p" ? Math.sign(dx) : -Math.sign(dx)), [x, y] = handlePos(h, lm);
+    const r = Math.hypot(x - lm.cx, y - lm.cy) + grow * step2;
+    applyMove(h, lm.cx + (h === "p" ? r : -r), lm.cy);
+  }
+  function pointerToImage(e) {
+    const r = $("#irisFixCanvas").getBoundingClientRect(), W = $("#irisFixCanvas").width;
+    return [fix.ox + (e.clientX - r.left) / r.width * W / fix.k, fix.oy + (e.clientY - r.top) / r.height * W / fix.k];
+  }
+  function initFix() {
+    const wrap = $("#irisFixWrap");
+    wrap.addEventListener("pointerdown", (e) => {
+      const b = e.target.closest(".hdl");
+      if (!b) return;
+      e.preventDefault();
+      selectHandle(b.dataset.h);
+      fix.drag = b.dataset.h;
+      b.setPointerCapture?.(e.pointerId);
+      b.focus();
+    });
+    wrap.addEventListener("pointermove", (e) => {
+      if (!fix.drag) return;
+      const [x, y] = pointerToImage(e);
+      applyMove(fix.drag, x, y);
+    });
+    const end = () => fix.drag = null;
+    wrap.addEventListener("pointerup", end);
+    wrap.addEventListener("pointercancel", end);
+    wrap.addEventListener("keydown", (e) => {
+      const b = e.target.closest(".hdl"), d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (!b || !d) return;
+      e.preventDefault();
+      selectHandle(b.dataset.h);
+      nudge(b.dataset.h, d[0], d[1], e.shiftKey);
+    });
+    wrap.addEventListener("click", (e) => {
+      const b = e.target.closest(".hdl");
+      if (b) selectHandle(b.dataset.h);
+    });
+    $("#irisFixSel").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-sel]");
+      if (!b) return;
+      selectHandle(b.dataset.sel);
+      drawFix();
+    });
+    for (const b of $$("#irisFixSheet [data-nudge]"))
+      b.addEventListener("click", () => {
+        const [dx, dy] = b.dataset.nudge.split(",").map(Number);
+        nudge("c", dx, dy, "btn");
+      });
+    for (const b of $$("#irisFixSheet [data-size]")) b.addEventListener("click", () => nudge(fix.sel, 0, 0, "btn", Number(b.dataset.size)));
+    $("#irisFixOk").addEventListener("click", async () => {
+      const s = fix.s;
+      if (!s) return;
+      if (!validLandmarks(fix.lm, s.img.width, s.img.height)) {
+        fix.errAt = performance.now();
+        $("#irisFixVals").textContent = "Repères incohérents : le bord de l'iris doit entourer la pupille d'au moins 20 %. Agrandissez le bord ou réduisez la pupille.";
+        return;
+      }
+      if (irisDiameter(fix.lm) < MIN_IRIS_PX) {
+        fix.errAt = performance.now();
+        $("#irisFixVals").textContent = `Iris trop petit (${Math.round(irisDiameter(fix.lm))} px, minimum ${MIN_IRIS_PX}) : prenez la photo de plus près.`;
+        return;
+      }
+      s.lm = copyLm(fix.lm);
+      s.cache = null;
+      s.status = "ready";
+      s.msg = (s.lm.auto ? "Repérage automatique." : "Repères corrigés à la main.") + smallNote(s.lm);
+      s.warn = "";
+      s.lmSmall = null;
+      s.gen++;
+      invalidate();
+      fix.s = null;
+      closeDialog();
+      renderSlot2(s);
+      if (s.baseRef) {
+        const it = base.items.find((i) => i.ref === s.baseRef);
+        try {
+          const ok = it && await updateIfExists({ ...it, lm: packLandmarks(s.lm) });
+          if (!ok) {
+            s.baseRef = null;
+            toast("Cet iris n'est plus dans ma base (supprimé ailleurs) : les repères restent ici seulement.");
+          }
+          await refreshBase();
+        } catch (e) {
+          console.error(e);
+          toast("Repères non mis à jour dans ma base.");
+        }
+        renderSlot2(s);
+      }
+      $("[data-act=fix]", el2(s))?.focus();
+    });
+    $("#irisFixAuto").addEventListener("click", async () => {
+      const s = fix.s;
+      if (!s) return;
+      if (!s.lmAuto) {
+        $("#irisFixVals").textContent = "Repérage automatique en cours…";
+        const gen = s.gen, img = s.img, lm = await segmentIris(img).catch(() => null);
+        if (fix.s !== s || gen !== s.gen || img !== s.img) return;
+        if (!lm) {
+          $("#irisFixVals").textContent = "Le repérage automatique ne trouve pas l'iris sur cette photo : gardez la correction à la main.";
+          return;
+        }
+        s.lmAuto = lm;
+      }
+      fix.lm = copyLm(s.lmAuto);
+      drawFix();
+      $("#irisFixOk").focus();
+    });
+  }
+  var yieldNow3 = () => new Promise((r) => setTimeout(r, 0));
+  async function compareIris() {
+    const list = readyOf().filter((s) => s.eye);
+    if (list.length < 2 || run3.busy) return;
+    run3.busy = true;
+    const gen = ++run3.gen, t0 = performance.now();
+    let step2 = "";
+    const st = $("#irisStatus"), paint = () => gen === run3.gen && (st.textContent = `${step2} (${Math.round((performance.now() - t0) / 1e3)} s)`);
+    const tick = setInterval(paint, 1e3);
+    $("#irisCancel").hidden = false;
+    updateGo();
+    say3("Comparaison des iris : analyse en cours.");
+    try {
+      for (const [n, s] of list.entries()) {
+        const key = `${JSON.stringify(packLandmarks(s.lm))}|${s.eye}`;
+        if (s.cache?.key === key) continue;
+        const res = await analyzeIris(s.img, s.lm, {
+          mirror: s.eye === "G",
+          stop: () => gen !== run3.gen,
+          onStep: (t) => {
+            step2 = `Iris ${n + 1} sur ${list.length} : ${t}…`;
+            paint();
+          }
+        });
+        if (gen !== run3.gen) return;
+        s.cache = { key, res };
+        await yieldNow3();
+      }
+      if (gen !== run3.gen) return;
+      run3.res = list.map((s) => ({ s, eye: s.eye, ...s.cache.res }));
+      renderResults2();
+      st.textContent = `Comparaison terminée en ${Math.round((performance.now() - t0) / 1e3)} s.`;
+      say3("Comparaison des iris terminée.");
+    } catch (e) {
+      if (gen !== run3.gen) return;
+      console.error(e);
+      st.textContent = "La comparaison n'a pas abouti.";
+    } finally {
+      clearInterval(tick);
+      if (gen === run3.gen) {
+        $("#irisCancel").hidden = true;
+        run3.busy = false;
+        updateGo();
+      }
+    }
+  }
+  var sideLine = (t, A, B) => t.side == null ? "Non mesurable" : t.side === "egalite" ? `Égalité entre ${A} et ${B}` : `Plus proche de : ${t.side === "a" ? A : B}`;
+  var nm2 = (r) => nameOf(r.s);
+  function bandDesc(r) {
+    const parts = MOTIFS.map((m) => `${m.label.toLowerCase()} : ${r.F[m.key] == null ? `non mesurable (${r.why[m.key]})` : describe2(m.key, r.F[m.key])}`);
+    return `Iris de ${nm2(r)}, ${EYE[r.eye]}, déroulé de la pupille (en haut) au bord (en bas), sur un tour complet en partant du côté du nez. ${parts.join(" ; ")}.`;
+  }
+  function drawBand(cv, r) {
+    const { width: w, height: h } = r.band, g = cv.getContext("2d");
+    cv.width = w;
+    cv.height = h;
+    g.putImageData(new ImageData(r.band.data, w, h), 0, 0);
+    const line = (y, dash) => {
+      for (const [lw, c] of [[3, "rgba(0,0,0,.7)"], [1.5, "#fff"]]) {
+        g.lineWidth = lw;
+        g.strokeStyle = c;
+        g.setLineDash(dash);
+        g.beginPath();
+        g.moveTo(0, y);
+        g.lineTo(w, y);
+        g.stroke();
+      }
+    };
+    line(h / 3, [6, 6]);
+    line(2 * h / 3, [6, 6]);
+    if (r.F.collerette != null) line(r.F.collerette * h, []);
+    g.setLineDash([]);
+  }
+  function renderResults2() {
+    const R = run3.res;
+    if (!R) return;
+    $("#irisResults").hidden = false;
+    const box = $("#irisBands");
+    box.innerHTML = R.map((r, k) => `<figure class="iband"><figcaption><strong>${esc(nm2(r))}</strong> · ${EYE[r.eye]}</figcaption>
+      <div class="bandrow"><div class="bandaxis" aria-hidden="true"><span>pupille</span><span>bord</span></div><canvas data-k="${k}" role="img" aria-label="${esc(bandDesc(r))}"></canvas></div></figure>`).join("");
+    for (const cv of $$("canvas", box)) drawBand(cv, R[cv.dataset.k]);
+    const eyes = new Set(R.map((r) => r.eye));
+    $("#irisEyeWarn").hidden = eyes.size < 2;
+    const trioMode = R.length === 3 && R[0].s.i === 0;
+    const vals = (m) => `<ul class="ivals">${R.map((r) => `<li><strong>${esc(nm2(r))}</strong> : ${esc(cellText(r, m))}</li>`).join("")}</ul>`;
+    let cards;
+    if (trioMode) {
+      const T2 = trio(R[0].F, R[1].F, R[2].F);
+      $("#irisTableIntro").textContent = `Pour chaque motif : de quel parent ${nm2(R[0])} est le plus proche, ou égalité. Il n'y a pas de total.`;
+      cards = MOTIFS.map((m, k) => `<li class="imotif"><h3>${esc(m.label)}</h3><p class="hint">${esc(m.what)}</p>${vals(m)}<p class="iside">${esc(sideLine(T2[k], nm2(R[1]), nm2(R[2])))}</p></li>`);
+    } else {
+      $("#irisTableIntro").textContent = R.length === 2 ? `Pour chaque motif : à quel point les deux iris se ressemblent. Il n'y a pas de total.` : `Pour comparer une personne à ses deux parents, placez-la en iris 1. Ici : proximité de chaque paire, motif par motif.`;
+      const pairs = [];
+      for (let a = 0; a < R.length; a++) for (let b = a + 1; b < R.length; b++) pairs.push([a, b]);
+      cards = MOTIFS.map((m) => `<li class="imotif"><h3>${esc(m.label)}</h3><p class="hint">${esc(m.what)}</p>${vals(m)}${pairs.map(([a, b]) => `<p class="iside">${esc(nm2(R[a]))} et ${esc(nm2(R[b]))} : ${esc(pairWords(gap(m, R[a].F, R[b].F)))}</p>`).join("")}</li>`);
+    }
+    $("#irisTable").innerHTML = cards.join("");
+    $("#irisShare").hidden = !navigator.share;
+  }
+  var cellText = (r, m) => r.F[m.key] == null ? `non mesurable (${r.why[m.key]})` : describe2(m.key, r.F[m.key]);
+  function resultText() {
+    const R = run3.res;
+    if (!R) return "";
+    const L = [`Air de famille, comparaison d'iris (${R.map((r) => `${nm2(r)}, ${EYE[r.eye]}`).join(" ; ")})`];
+    const trioMode = R.length === 3 && R[0].s.i === 0;
+    if (trioMode) {
+      const T2 = trio(R[0].F, R[1].F, R[2].F);
+      MOTIFS.forEach((m, k) => L.push(`- ${m.label} : ${sideLine(T2[k], nm2(R[1]), nm2(R[2]))}`));
+    } else
+      for (let a = 0; a < R.length; a++)
+        for (let b = a + 1; b < R.length; b++) {
+          L.push(`${nm2(R[a])} et ${nm2(R[b])} :`);
+          for (const m of MOTIFS) L.push(`- ${m.label} : ${pairWords(gap(m, R[a].F, R[b].F))}`);
+        }
+    L.push("Indice, pas une preuve : l'iris de chacun est unique. Aucune image n'est partagée.");
+    return L.join("\n");
+  }
+  var keepPending = null;
+  function askKeep(s) {
+    if (!s.lm || !base.on) return;
+    const person = s.name.trim();
+    if (!person) {
+      toast("Indiquez d'abord le prénom pour garder cet iris.");
+      $("[data-f=name]", el2(s)).focus();
+      return;
+    }
+    if (!s.eye) {
+      toast("Indiquez d'abord l'œil photographié.");
+      return;
+    }
+    keepPending = { s, person, eye: s.eye, gen: s.gen };
+    $("#irisKeepWho").innerHTML = `J'ai l'accord de <strong>${esc(person)}</strong> (pour un enfant : de ses parents) pour garder la photo de son iris (${EYE[s.eye]}) sur ce téléphone.`;
+    $("#irisKeepOk").checked = false;
+    $("#irisKeepGo").disabled = true;
+    openDialog($("#irisKeepSheet"));
+  }
+  async function doKeep() {
+    const p = keepPending;
+    keepPending = null;
+    closeDialog();
+    if (!p || p.gen !== p.s.gen || !base.on) return;
+    const s = p.s;
+    try {
+      const { img, lm } = irisCrop(s.img, s.lm);
+      const c = makeCanvas(img.width, img.height);
+      c.getContext("2d").putImageData(new ImageData(img.data, img.width, img.height), 0, 0);
+      const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+      if (!blob?.size) throw new Error("image vide");
+      const ref = `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+      await addItem({ kind: "iris", ref, person: p.person, eye: p.eye, added: (/* @__PURE__ */ new Date()).toISOString(), lm: packLandmarks(lm), jpeg: blob });
+      await refreshBase();
+      if (p.gen !== s.gen) {
+        toast(`Iris de ${p.person} gardé dans ma base.`);
+        return;
+      }
+      invalidate();
+      Object.assign(s, { src: c, img: ctx2d(c).getImageData(0, 0, c.width, c.height), lm, lmAuto: null, cache: null, baseRef: ref, name: p.person, eye: p.eye });
+      s.gen++;
+      await refreshBase();
+      toast(`Iris de ${p.person} gardé dans ma base.`);
+    } catch (e) {
+      console.error(e);
+      toast("L'iris n'a pas pu être gardé (stockage plein ou base supprimée ?).");
+    }
+    renderSlot2(s);
+    $("[data-act=fix]", el2(s))?.focus();
+  }
+  var baseTarget = null;
+  async function openFromBase(s) {
+    if (!agreed()) return;
+    baseTarget = s;
+    await renderBaseList();
+    $("#irisBaseTitle").textContent = `Choisir un iris de ma base (${ROLES[s.i].toLowerCase()})`;
+    openDialog($("#irisBaseSheet"));
+  }
+  async function renderBaseList() {
+    const items = base.items.filter((i) => i.kind === "iris");
+    const list = $("#irisBaseList");
+    list.innerHTML = items.map((it) => `<button type="button" class="ibitem" data-ref="${esc(it.ref)}"><canvas width="64" height="64" aria-hidden="true"></canvas><span>Iris de ${esc(it.person)}, ${EYE[it.eye] || "œil non précisé"}</span></button>`).join("") || `<p class="hint">Aucun iris dans ma base.</p>`;
+    for (const b of $$(".ibitem", list)) {
+      const it = items.find((i) => i.ref === b.dataset.ref);
+      try {
+        const bmp = await createImageBitmap(it.jpeg);
+        $("canvas", b).getContext("2d").drawImage(bmp, 0, 0, 64, 64);
+        bmp.close?.();
+      } catch {
+      }
+    }
+  }
+  async function useFromBase(ref) {
+    const s = baseTarget, it = base.items.find((i) => i.ref === ref);
+    baseTarget = null;
+    closeDialog();
+    if (s && !it) toast("Cet iris n'est plus dans ma base (supprimé ailleurs).");
+    if (!s || !it) return;
+    try {
+      const bmp = await createImageBitmap(it.jpeg), c = makeCanvas(bmp.width, bmp.height);
+      c.getContext("2d").drawImage(bmp, 0, 0);
+      bmp.close?.();
+      await setImage(s, c, { lm: unpackLandmarks(it.lm), name: it.person, eye: it.eye || "", baseRef: it.ref });
+      toast(`Iris de ${it.person} chargé depuis ma base (mesures recalculées).`);
+    } catch (e) {
+      console.error(e);
+      toast("Cet iris n'a pas pu être relu.");
+    }
+    $("[data-act=fix]", el2(s))?.focus();
+  }
+  function initIris() {
+    $("#irisSlots").innerHTML = islots.map(slotHtml).join("");
+    const box = $("#irisSlots");
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b) return;
+      const s = islots[Number(b.closest(".islot").dataset.i)], act = b.dataset.act;
+      if (act === "pick") $("[data-f=file]", el2(s)).click();
+      else if (act === "fix") openFix(s);
+      else if (act === "clear") {
+        clearSlot2(s);
+        $("[data-act=pick]", el2(s)).focus();
+      } else if (act === "keep") askKeep(s);
+      else if (act === "frombase") openFromBase(s);
+    });
+    box.addEventListener("change", (e) => {
+      const s = islots[Number(e.target.closest(".islot").dataset.i)];
+      if (e.target.dataset.f === "file") {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        loadFile(s, f);
+      } else if (e.target.type === "radio") {
+        s.eye = e.target.value;
+        invalidate();
+        renderSlot2(s);
+      }
+    });
+    box.addEventListener("input", (e) => {
+      if (e.target.dataset.f !== "name") return;
+      const s = islots[Number(e.target.closest(".islot").dataset.i)];
+      if (s.baseRef) return;
+      s.name = e.target.value;
+      updateGo();
+      if (run3.res) renderResults2();
+    });
+    $("#irisAgree").addEventListener("change", () => islots.forEach(renderSlot2));
+    $("#irisGo").addEventListener("click", compareIris);
+    $("#irisCancel").addEventListener("click", () => {
+      run3.gen++;
+      run3.busy = false;
+      $("#irisStatus").textContent = "Comparaison annulée.";
+      say3("Comparaison annulée.");
+      $("#irisCancel").hidden = true;
+      updateGo();
+      $("#irisGo").focus();
+    });
+    $("#irisCopy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(resultText());
+        toast("Résultats copiés (texte seul, aucune image).");
+      } catch {
+        toast("Copie impossible sur ce navigateur.");
+      }
+    });
+    $("#irisShare").addEventListener("click", () => navigator.share?.({ title: "Air de famille : iris", text: resultText() }).catch(() => {
+    }));
+    $("#irisKeepOk").addEventListener("change", () => $("#irisKeepGo").disabled = !$("#irisKeepOk").checked);
+    $("#irisKeepGo").addEventListener("click", doKeep);
+    $("#irisBaseList").addEventListener("click", (e) => {
+      const b = e.target.closest(".ibitem");
+      if (b) useFromBase(b.dataset.ref);
+    });
+    on("base", () => {
+      const refs = new Set(base.items.map((i) => i.ref));
+      for (const s of islots) if (s.baseRef && !refs.has(s.baseRef)) s.baseRef = null;
+      islots.forEach(renderSlot2);
+      if (!$("#irisBaseSheet").hidden) base.on && base.items.some((i) => i.kind === "iris") ? renderBaseList() : closeDialog();
+      if (!$("#irisKeepSheet").hidden && !base.on) closeDialog();
+    });
+    initFix();
+    islots.forEach(renderSlot2);
+  }
+  async function putIris(i, canvas, lm) {
+    const s = islots[i];
+    await setImage(s, canvas, { baseRef: null });
+    if (s.src !== canvas) return;
+    if (lm && validLandmarks(lm, canvas.width, canvas.height)) {
+      s.lm = lm;
+      s.lmAuto = lm;
+      s.status = "ready";
+      renderSlot2(s);
+    }
+    emit2("mode", "iris");
+  }
+  var irisState = () => ({
+    slots: islots.map((s) => ({ status: s.status, has: !!s.src, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
+    results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
+    text: resultText()
+  });
+
+  // src/js/ui/irisselfie.js
+  var cam2 = { session: 0, stream: null, ramp: null, voice: true, busy: false, shot: null };
+  var alive2 = (sess) => sess === cam2.session && !$("#irisCamSheet").hidden;
+  var localVoice = () => {
+    const v = "speechSynthesis" in window ? speechSynthesis.getVoices().filter((x) => x.localService && /^fr/i.test(x.lang)) : [];
+    return v[0] || null;
+  };
+  function say4(text, force = true) {
+    $("#irisCamText").textContent = text;
+    const voice = cam2.voice ? localVoice() : null;
+    if (!voice) {
+      $("#irisCamSay").textContent = text;
+      return;
+    }
+    if (force) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.voice = voice;
+    u.lang = voice.lang;
+    speechSynthesis.speak(u);
+  }
+  var canSpeak2 = () => "speechSynthesis" in window;
+  function lamp(on2) {
+    const l = $("#irisLamp");
+    clearInterval(cam2.ramp);
+    cam2.ramp = null;
+    if (!on2) {
+      l.style.opacity = "0";
+      return;
+    }
+    let v = 0;
+    l.style.opacity = "0";
+    cam2.ramp = setInterval(() => {
+      v = Math.min(1, v + 0.1);
+      l.style.opacity = String(v);
+      if (v >= 1) {
+        clearInterval(cam2.ramp);
+        cam2.ramp = null;
+      }
+    }, 150);
+  }
+  function stopStream2() {
+    for (const t of cam2.stream?.getTracks?.() || []) t.stop();
+    cam2.stream = null;
+    const v = $("#irisCamVideo");
+    if (v) v.srcObject = null;
+  }
+  function stopAll() {
+    cam2.session++;
+    stopStream2();
+    lamp(false);
+    if (canSpeak2()) speechSynthesis.cancel();
+    cam2.shot = null;
+    const pv = $("#irisCamPreview");
+    if (pv) pv.width = pv.height = 0;
+  }
+  function openSelfie() {
+    stopAll();
+    $("#irisCamIntro").hidden = false;
+    $("#irisCamLive").hidden = true;
+    $("#irisCamResult").hidden = true;
+    $("#irisCamConsent").checked = false;
+    $("#irisCamGo").disabled = true;
+    openDialog($("#irisCamSheet"), stopAll);
+  }
+  async function start() {
+    const sess = ++cam2.session;
+    $("#irisCamIntro").hidden = true;
+    $("#irisCamLive").hidden = false;
+    $("#irisCamResult").hidden = true;
+    $("#irisCamNoCam").hidden = true;
+    $("#irisCamPaused").hidden = true;
+    $("#irisCamShot").disabled = true;
+    $("#irisCamText").focus();
+    say4("Ouverture de la caméra avant…");
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    } catch (e) {
+      console.warn(e);
+    }
+    if (!alive2(sess) || document.hidden) {
+      for (const t of stream?.getTracks?.() || []) t.stop();
+      return;
+    }
+    if (!stream) {
+      $("#irisCamNoCam").hidden = false;
+      say4("Caméra indisponible ou refusée.");
+      return;
+    }
+    stopStream2();
+    cam2.stream = stream;
+    for (const t of stream.getTracks())
+      t.addEventListener("ended", () => {
+        if (cam2.stream !== stream) return;
+        stopStream2();
+        lamp(false);
+        $("#irisCamPaused").hidden = false;
+        $("#irisCamShot").disabled = true;
+      });
+    const v = $("#irisCamVideo");
+    v.srcObject = stream;
+    try {
+      await v.play();
+    } catch {
+    }
+    if (!alive2(sess)) return stopStream2();
+    lamp(true);
+    $("#irisCamShot").disabled = false;
+    say4("Placez un œil dans le cercle, à environ 15 centimètres, et regardez la caméra en haut de l'écran. Touchez « Prendre la photo ».");
+  }
+  var wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  function frameCrop(v) {
+    const box = $("#irisCamView").getBoundingClientRect(), vw = v.videoWidth, vh = v.videoHeight;
+    const sc = Math.max(box.width / vw, box.height / vh), d = 0.42 * box.width / sc, side = d * 1.35;
+    const c = makeCanvas(side, side);
+    ctx2d(c).drawImage(v, vw / 2 - side / 2, vh / 2 - side / 2, side, side, 0, 0, c.width, c.height);
+    return c;
+  }
+  async function shoot2() {
+    const sess = cam2.session, v = $("#irisCamVideo");
+    if (cam2.busy || !cam2.stream || !v.videoWidth) return;
+    cam2.busy = true;
+    $("#irisCamShot").disabled = true;
+    try {
+      for (const n of ["3", "2", "1"]) {
+        say4(n);
+        await wait(800);
+        if (!alive2(sess)) return;
+      }
+      if (!cam2.stream || !v.videoWidth) return;
+      const c = frameCrop(v);
+      say4("Photo prise. Analyse…");
+      const img = ctx2d(c).getImageData(0, 0, c.width, c.height), lm = await segmentIris(img).catch(() => null);
+      if (!alive2(sess)) return;
+      cam2.shot = { c, lm };
+      showResult(c, img, lm);
+    } finally {
+      cam2.busy = false;
+      if (alive2(sess)) $("#irisCamShot").disabled = !cam2.stream;
+    }
+  }
+  function showResult(c, img, lm) {
+    const pv = $("#irisCamPreview"), g = pv.getContext("2d");
+    pv.width = c.width;
+    pv.height = c.height;
+    g.drawImage(c, 0, 0);
+    const lines = [];
+    let ok = false;
+    if (!lm) lines.push("Iris non trouvé : rapprochez le téléphone (environ 15 cm) et placez l'œil dans le cercle.");
+    else {
+      const d = irisDiameter(lm);
+      ok = d >= MIN_IRIS_PX;
+      lines.push(
+        d >= MIN_MEASURE_PX ? `Iris de ${Math.round(d)} px de diamètre : assez grand pour mesurer les motifs (minimum ${MIN_MEASURE_PX} px).` : ok ? `Iris de ${Math.round(d)} px : assez pour le voir et le comparer à l'œil, trop petit pour mesurer les motifs (minimum ${MIN_MEASURE_PX} px).` : `Iris de ${Math.round(d)} px : trop petit (minimum ${MIN_IRIS_PX} px). Rapprochez le téléphone.`
+      );
+      const G = gray(img), W = img.width, H = img.height;
+      let nb = 0, np = 0, s = 0, s2 = 0, n = 0;
+      const ri = d / 2;
+      for (let y = 1; y < H - 1; y++)
+        for (let x = 1; x < W - 1; x++) {
+          const r = Math.hypot(x - lm.cx, y - lm.cy);
+          if (r < lm.rp * 0.9) {
+            np++;
+            if (G[y * W + x] > 200) nb++;
+          } else if (r > lm.rp * 1.2 && r < edgeAt(lm.ro, Math.atan2(y - lm.cy, x - lm.cx)) * 0.9) {
+            const L = 4 * G[y * W + x] - G[y * W + x - 1] - G[y * W + x + 1] - G[(y - 1) * W + x] - G[(y + 1) * W + x];
+            s += L;
+            s2 += L * L;
+            n++;
+          }
+        }
+      const sharp = n ? s2 / n - (s / n) ** 2 : 0;
+      lines.push(nb / Math.max(1, np) > 0.02 ? "Reflet de l'écran vu dans la pupille : oui." : "Reflet de l'écran dans la pupille : non vu (regardez la caméra, rapprochez le téléphone).");
+      lines.push(`Netteté de l'iris (indicative) : ${Math.round(sharp)}${sharp >= 40 ? ", nette" : sharp >= 15 ? ", moyenne" : ", floue"}.`);
+      g.lineWidth = Math.max(2, c.width / 200);
+      g.strokeStyle = "#fff";
+      g.beginPath();
+      g.arc(lm.cx, lm.cy, lm.rp, 0, 2 * Math.PI);
+      g.stroke();
+      g.beginPath();
+      g.arc(lm.cx, lm.cy, ri, 0, 2 * Math.PI);
+      g.stroke();
+    }
+    $("#irisCamVerdict").textContent = lines.join(" ");
+    pv.setAttribute("aria-label", `Photo de l'œil prise par le selfie. ${lines.join(" ")}`);
+    for (const b of $$("#irisCamResult [data-use]")) b.disabled = !ok;
+    $("#irisCamResult").hidden = false;
+    say4(lines.join(" "));
+    $("#irisCamVerdict").focus();
+  }
+  function initIrisSelfie() {
+    $("#irisSelfieBtn").addEventListener("click", openSelfie);
+    $("#irisCamConsent").addEventListener("change", () => $("#irisCamGo").disabled = !$("#irisCamConsent").checked);
+    $("#irisCamGo").addEventListener("click", start);
+    $("#irisCamShot").addEventListener("click", shoot2);
+    $("#irisCamRetry").addEventListener("click", () => {
+      $("#irisCamResult").hidden = true;
+      $("#irisCamShot").focus();
+    });
+    $("#irisCamResume").addEventListener("click", start);
+    $("#irisCamVoice").addEventListener("click", () => {
+      cam2.voice = !cam2.voice;
+      $("#irisCamVoice").setAttribute("aria-pressed", String(cam2.voice));
+      if (!cam2.voice && canSpeak2()) speechSynthesis.cancel();
+    });
+    for (const b of $$("#irisCamResult [data-use]"))
+      b.addEventListener("click", async () => {
+        const shot = cam2.shot;
+        if (!shot?.lm) return;
+        closeDialog();
+        await putIris(Number(b.dataset.use), shot.c, shot.lm);
+        cam2.shot = null;
+      });
+    document.addEventListener("visibilitychange", () => {
+      if ($("#irisCamSheet").hidden || $("#irisCamLive").hidden || !document.hidden) return;
+      cam2.session++;
+      stopStream2();
+      lamp(false);
+      $("#irisCamPaused").hidden = false;
+      $("#irisCamShot").disabled = true;
+    });
+  }
+  var selfieState = () => ({ stream: !!cam2.stream, lamp: Number($("#irisLamp")?.style.opacity || 0), ramping: !!cam2.ramp });
+
   // src/js/main.js
-  var MODES = ["comparer", "album", "vieillir", "fusion"];
+  var MODES = ["comparer", "album", "vieillir", "fusion", "iris"];
   var mode = "comparer";
   function setMode(m, { focus = false, push = true } = {}) {
     if (!MODES.includes(m)) m = "comparer";
@@ -4369,19 +6353,22 @@
       $("#queueTxt").textContent = n > 1 ? `${n} analyses en attente` : "";
     });
     const showReset = () => {
-      $("#resetBtn").hidden = !slots.some((s) => s.canvas || s.status !== "empty") && !album.faces.length;
+      $("#resetBtn").hidden = !slots.some((s) => s.canvas || s.status !== "empty") && !album.faces.length && !irisHasContent();
     };
     on("faces", showReset);
+    on("iris", showReset);
     $("#resetBtn").addEventListener("click", () => {
-      const slotsBackup = snapshotSlots(), albumBackup = [...album.faces];
+      const slotsBackup = snapshotSlots(), albumBackup = [...album.faces], irisBackup = snapshotIris();
       clearAll();
       clearAlbum();
+      clearIris();
       clearCompareCache();
-      toast(baseState().on ? "Comparaisons et album effacés. Votre base sur ce téléphone est conservée (Album, « Gérer ma base »)." : "Tout est effacé.", {
+      toast(baseState().on ? "Comparaisons, album et iris effacés. Votre base sur ce téléphone est conservée (Album, « Gérer ma base »)." : "Tout est effacé.", {
         label: "Annuler",
         run: () => {
           restoreSlots(slotsBackup);
           restoreAlbum(albumBackup);
+          restoreIris(irisBackup);
         }
       });
     });
@@ -4400,6 +6387,8 @@
     setBirthLookup(birthOf);
     initAging();
     initFusion();
+    initIris();
+    initIrisSelfie();
     initModes();
     initPaste();
     initMisc();
@@ -4461,6 +6450,7 @@
     // Cadres des visages de l'album (coordonnées du recadrage), pour vérifier le masquage (AdF-044).
     albumBoxes: () => album.faces.map((f) => ({ x: f.det.box.x, y: f.det.box.y, w: f.det.box.width, h: f.det.box.height, kept: !!f.baseRef })),
     live: { detectLive, liveMeasure, lumStats },
+    iris: { state: irisState, put: putIris, selfie: selfieState },
     moteur: { normalize, measures, symmetrize, appearance, sampleColors, quality }
   };
   boot();

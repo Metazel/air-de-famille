@@ -345,3 +345,52 @@ input[type=range]{accent-color:var(--accent)}
 .mthumb{position:relative;width:72px;height:72px}
 .mthumb canvas{width:72px;height:72px;border-radius:8px;display:block}
 .mthumb .x{position:absolute;top:-6px;right:-6px;min-width:28px;min-height:28px}
+
+/* v2.5 — iris (AdF-039) */
+.irisslots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:640px){.irisslots{grid-template-columns:1fr}}
+.islot{--c:var(--pa);display:flex;flex-direction:column;gap:7px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px}
+.islot[data-i="1"]{--c:var(--pb)} .islot[data-i="2"]{--c:var(--pc)}
+.islot.filled{border-color:var(--c)}
+.islot[data-status=tofix]{border-style:dashed}
+.ihead{display:flex;align-items:center;gap:8px}
+.ihead .badge{position:static;flex:none}
+.imedia{position:relative;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:var(--sunk);display:grid;place-items:center}
+.imedia canvas{position:absolute;inset:0;width:100%;height:100%}
+.ilabel{display:flex;flex-direction:column;gap:2px;font-size:.78rem;color:var(--muted)}
+.ieye{border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:4px 14px}
+.ieye legend{font-size:.78rem;color:var(--muted);padding:0;margin-bottom:2px}
+.ieye .check{color:var(--ink);align-items:center;min-height:24px}
+.iact{display:flex;flex-wrap:wrap;gap:6px}
+.iact .btn{min-height:32px}
+.istate.warn{color:var(--warn);font-weight:600}
+.ibands{display:flex;flex-direction:column;gap:12px}
+.iband{margin:0;display:flex;flex-direction:column;gap:4px}
+.iband figcaption{font-size:.85rem}
+.bandrow{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;align-items:stretch}
+.bandaxis{display:flex;flex-direction:column;justify-content:space-between;font-size:.66rem;color:var(--muted);font-family:var(--font-data)}
+.bandrow canvas{width:100%;height:auto;aspect-ratio:720/128;border-radius:6px;display:block;background:var(--sunk)}
+.fixwrap{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;width:min(100%,60vh);margin:0 auto}
+.fixwrap canvas{width:100%;height:auto;display:block;border-radius:10px;background:var(--sunk)}
+.hdl{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:3px solid #fff;background:rgba(0,0,0,.55);color:#fff;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 2px rgba(0,0,0,.6);touch-action:none}
+.hdl[aria-pressed="true"]{background:var(--accent);border-color:#fff}
+.hdl:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.pad{display:flex;flex-wrap:wrap;gap:6px}
+.pad .btn{min-width:44px;min-height:36px}
+.fixband{margin:0;display:flex;flex-direction:column;gap:4px}
+.fixband canvas{width:100%;height:auto;border-radius:6px;background:var(--sunk)}
+.ibase{display:flex;flex-direction:column;gap:8px}
+.ibitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:6px 10px;text-align:left;font-weight:600}
+.ibitem canvas{width:64px;height:64px;border-radius:8px;flex:none}
+/* Selfie de l'iris (essai) : lumière blanche fixe en haut de l'écran, près de la caméra (R8). */
+.irislight .sheet-in{position:relative;max-height:100vh}
+.irislamp{position:sticky;top:0;height:28vh;margin:-14px calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 0;background:#fff;opacity:0;pointer-events:none;flex:none;border-radius:18px 18px 0 0}
+.irisframe{position:absolute;left:50%;top:50%;width:42%;aspect-ratio:1/1;transform:translate(-50%,-50%);border:4px dashed rgba(255,255,255,.85);border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+.campreview{width:min(100%,40vh);height:auto;display:block;margin:8px auto;border-radius:10px}
+.imotifs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.imotif{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:4px}
+.imotif:first-child{border-top:0}
+.imotif h3{font-size:.95rem}
+.ivals{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;font-size:.85rem}
+.iside{font-weight:700;font-size:.9rem}
+@media (max-width:640px){.imedia{width:min(100%,220px);margin:0 auto}}

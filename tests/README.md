@@ -17,5 +17,8 @@ python tests/e2e_public.py .                          # e2e, accessibilité, CSP
 - `visage_synthetique.js` : visage dessiné à la volée (68 repères génériques, empreinte aléatoire),
   injecté par `AirDeFamille.putCanvas` pour tester résultats, contrôle de qualité, masques et photos
   multiples sans aucune photo réelle.
+- `iris_synthetique.js` : iris générés à paramètres connus (filaments, sillons, spirales, cryptes,
+  collerette, reflet ; fond blanc ou œil avec paupières), importés comme des fichiers PNG pour tester
+  l'onglet Iris de bout en bout sans aucune vraie photo.
 - Écarts connus et non bloquants : `AXE_CONNUS` et `FOCUS_CONNUS` dans `e2e_public.py`, déclarés
   par règle et par élément, avec leur identifiant du registre. Les retirer une fois corrigés.
