@@ -3,6 +3,39 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.5.0] — 2026-11-10
+
+Onglet « Iris » (AdF-039), cadrage validé par David le 10/11 (MVP I1 à I5, exigences R1 à R9).
+L'appli montre les iris côte à côte et mesure leurs motifs ; la personne juge. Aucun score de parenté.
+
+- Import d'un gros plan de l'œil ; repérage automatique de la pupille et du bord de l'iris (photo
+  détourée sur fond blanc, ou photo ordinaire par la méthode de Daugman) ; sinon, correction manuelle
+  proposée d'office. Iris de moins de 80 px refusé avec la raison.
+- Correction des repères : trois poignées (centre, pupille, bord de l'iris) au doigt, au clavier ou
+  par boutons (WCAG 2.5.7), aperçu du déroulé mis à jour, retour au repérage automatique.
+- Iris déroulés côte à côte (cœur, collerette, pourtour ; reflets effacés), décrits en texte.
+- Sept mesures (filaments du cœur et du milieu, sillons et spirales du pourtour, cryptes, position de
+  la collerette, contraste cœur / pourtour). Pour une personne et ses deux parents : chaque motif
+  penche d'un côté ou reste à égalité, sans total. Mesure non mesurable signalée avec sa raison.
+- Œil gauche ou droit obligatoire ; bandes remises dans le même sens ; avertissement si l'on compare
+  un œil gauche et un œil droit.
+- Confidentialité : accord des personnes avant tout import ; aucune requête réseau ; rien stocké par
+  défaut ; dans « Ma base », seuls l'iris recadré (sans paupières ni visage) et ses repères, après
+  l'accord de la personne, jamais les mesures ; partage en texte seul, jamais d'image d'iris.
+- Aucune interprétation de santé ou de caractère (l'iridologie n'a pas de base scientifique) ; aucune
+  identification.
+- Essai expérimental, visible : selfie de l'iris éclairé par l'écran (lumière blanche fixe, montée
+  progressive, jamais clignotante, coupée à la fermeture et en arrière-plan) avec verdict de faisabilité.
+- Mesures prudentes (relectures séparées, AdF-047, AdF-054) : motifs mesurés seulement au-delà de 300 px de
+  diamètre ; reflets repérés sur tout l'iris et exclus ; iris flou ou sans motif « non mesurable » ;
+  collerette « non mesurable » si son anneau n'est pas net. Repères non validés : comparaison impossible.
+- Une seule fenêtre à la fois (caméra et lumière toujours coupées) ; base synchronisée entre onglets, un iris
+  supprimé ailleurs n'est jamais recréé ; voix du téléphone locale seulement pour le selfie.
+- Tests : 168 contrôles e2e publics, dont 55 pour l'iris sur des iris de synthèse générés
+  (`tests/iris_synthetique.js`), sans aucune vraie photo. Régression privée des visages : 0,000000.
+- Limites connues : fiabilité des côtés à établir par un banc test-retest (AdF-046) ; mesure des cryptes
+  peu sensible ; durée sur téléphone à vérifier (environ 2 à 3 s par iris sur ordinateur).
+
 ## [v2.4.0] — 2026-11-10
 
 Ma base sur ce téléphone (lot 3, CU8, AdF-020), décidée par David le 08/11 (option A).

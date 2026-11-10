@@ -3,8 +3,9 @@
 [![Contrôles](https://github.com/metazel/air-de-famille/actions/workflows/ci.yml/badge.svg)](https://github.com/metazel/air-de-famille/actions/workflows/ci.yml)
 
 Application web installable (Android, ordinateur) qui compare des visages trait par trait,
-retrouve qui ressemble à qui dans une famille à âge égal, et propose des simulations
-(vieillir, rajeunir, fusionner deux visages).
+retrouve qui ressemble à qui dans une famille à âge égal, propose des simulations
+(vieillir, rajeunir, fusionner deux visages) et compare le dessin de l'iris d'une personne
+et de ses parents, motif par motif.
 
 **Ouvrir l'application : https://metazel.github.io/air-de-famille/**
 
@@ -22,8 +23,11 @@ retrouve qui ressemble à qui dans une famille à âge égal, et propose des sim
 
 - Toute l'analyse se fait sur l'appareil. Aucune photo n'est envoyée ni stockée sur ce site.
 - Une politique de sécurité (CSP) interdit techniquement toute connexion vers un autre site.
-- Les photos ne sont jamais enregistrées. Seuls un prénom et une date de naissance peuvent être
-  mémorisés dans le navigateur, et seulement si vous cochez la case prévue dans l'album.
+- Rien n'est enregistré par défaut. Un prénom et une date de naissance peuvent être mémorisés dans
+  le navigateur si vous cochez la case prévue dans l'album. « Ma base », désactivée par défaut, garde
+  sur le téléphone les photos recadrées et les iris que vous choisissez, avec l'accord des personnes ;
+  les mesures du visage et de l'iris ne sont jamais enregistrées.
+- L'image d'un iris n'est jamais partagée : seul le texte des résultats peut l'être.
 - Photos d'autres personnes, en particulier d'enfants : demandez leur accord ou celui de leurs parents.
 
 Détails et signalement d'une faille : [SECURITY.md](SECURITY.md).
