@@ -88,13 +88,13 @@
   function enqueue(job) {
     pending++;
     emit();
-    const run2 = tail.then(job, job);
-    tail = run2.catch(() => {
+    const run22 = tail.then(job, job);
+    tail = run22.catch(() => {
     }).finally(() => {
       pending--;
       emit();
     });
-    return run2;
+    return run22;
   }
   function onQueueChange(fn) {
     listeners.add(fn);
@@ -170,7 +170,7 @@
   function measures(N) {
     const D = (i, j) => Math.hypot(N[i][0] - N[j][0], N[i][1] - N[j][1]);
     const fw = D(0, 16);
-    const open = (a, b, c, d, e, f) => (D(b, f) + D(c, e)) / 2 / D(a, d);
+    const open2 = (a, b, c, d, e, f) => (D(b, f) + D(c, e)) / 2 / D(a, d);
     const tilt = (outer, inner) => Math.atan2(N[inner][1] - N[outer][1], Math.abs(N[inner][0] - N[outer][0])) * 180 / Math.PI;
     const arch = (a, m, b) => {
       const [ax, ay] = N[a], [bx, by] = N[b], [mx, my] = N[m];
@@ -189,7 +189,7 @@
       contour,
       eyeSpan: 1 / fw,
       inner: D(39, 42),
-      open: (open(36, 37, 38, 39, 40, 41) + open(42, 43, 44, 45, 46, 47)) / 2,
+      open: (open2(36, 37, 38, 39, 40, 41) + open2(42, 43, 44, 45, 46, 47)) / 2,
       eyeW: (D(36, 39) + D(42, 45)) / 2,
       tilt: (tilt(36, 39) + tilt(45, 42)) / 2,
       browEye: (eyeR[1] - N[19][1] + (eyeL[1] - N[24][1])) / 2,
@@ -438,9 +438,9 @@
     if (!ref.length) return {};
     const L0 = mean(ref.map((r) => r.L)), E0 = mean(ref.map((r) => r.E));
     const hidden = (st) => st && (st.L < L0 * 0.7 || st.E > Math.max(E0 * 2.4, 0.1));
-    const open = Math.hypot(P[62][0] - P[66][0], P[62][1] - P[66][1]) / Math.hypot(P[48][0] - P[54][0], P[48][1] - P[54][1]) > 0.12;
-    const chin = patchStats(ctx, ...mid(57, 8, open ? 0.7 : 0.55), iod * (open ? 0.09 : 0.12));
-    const lip = open ? null : patchStats(ctx, ...mid(33, 51), iod * 0.06);
+    const open2 = Math.hypot(P[62][0] - P[66][0], P[62][1] - P[66][1]) / Math.hypot(P[48][0] - P[54][0], P[48][1] - P[54][1]) > 0.12;
+    const chin = patchStats(ctx, ...mid(57, 8, open2 ? 0.7 : 0.55), iod * (open2 ? 0.09 : 0.12));
+    const lip = open2 ? null : patchStats(ctx, ...mid(33, 51), iod * 0.06);
     const fore = [19, 24].map((i) => patchStats(ctx, P[i][0] + up[0] * iod * 0.32, P[i][1] + up[1] * iod * 0.32, iod * 0.1));
     return { beard: !!(hidden(chin) || hidden(lip)), fringe: fore.every((f) => f && f.L < L0 * 0.7), glasses: glassesBridge(c, N, F) };
   }
@@ -1402,19 +1402,19 @@
   // src/js/engine/guide.js
   var GUIDE = { minLight: 60, backlight: 0.6, minSize: 0.3, maxSize: 0.58, maxOffX: 0.12, maxOffY: 0.14, maxYaw: 0.07, pitchLo: 0.38, pitchHi: 0.68, maxRoll: 8 };
   function guide(m, mode2 = "self") {
-    const G = GUIDE, self = mode2 === "self";
+    const G = GUIDE, self2 = mode2 === "self";
     if (!m || !m.face) return { key: "noface", ok: false, score: 0 };
     const checks = [];
-    if (m.light != null && m.light < G.minLight) checks.push(self ? "dark" : "darkOther");
-    else if (m.light != null && m.around != null && m.light < m.around * G.backlight) checks.push(self ? "backlight" : "backlightOther");
+    if (m.light != null && m.light < G.minLight) checks.push(self2 ? "dark" : "darkOther");
+    else if (m.light != null && m.around != null && m.light < m.around * G.backlight) checks.push(self2 ? "backlight" : "backlightOther");
     if (m.size < G.minSize) checks.push("closer");
     else if (m.size > G.maxSize) checks.push("farther");
-    if (Math.abs(m.cx) > G.maxOffX) checks.push(self ? m.cx > 0 ? "phoneLeft" : "phoneRight" : m.cx > 0 ? "aimRight" : "aimLeft");
+    if (Math.abs(m.cx) > G.maxOffX) checks.push(self2 ? m.cx > 0 ? "phoneLeft" : "phoneRight" : m.cx > 0 ? "aimRight" : "aimLeft");
     if (Math.abs(m.cy) > G.maxOffY) checks.push(m.cy > 0 ? "phoneDown" : "phoneUp");
-    if (Math.abs(m.yaw) > G.maxYaw) checks.push(self ? m.yaw > 0 ? "headRight" : "headLeft" : "lookOther");
-    else if (m.pitch < G.pitchLo) checks.push(self ? "chinDown" : "lookOther");
-    else if (m.pitch > G.pitchHi) checks.push(self ? "chinUp" : "lookOther");
-    else if (Math.abs(m.roll) > G.maxRoll) checks.push(self ? m.roll > 0 ? "rollRight" : "rollLeft" : "lookOther");
+    if (Math.abs(m.yaw) > G.maxYaw) checks.push(self2 ? m.yaw > 0 ? "headRight" : "headLeft" : "lookOther");
+    else if (m.pitch < G.pitchLo) checks.push(self2 ? "chinDown" : "lookOther");
+    else if (m.pitch > G.pitchHi) checks.push(self2 ? "chinUp" : "lookOther");
+    else if (Math.abs(m.roll) > G.maxRoll) checks.push(self2 ? m.roll > 0 ? "rollRight" : "rollLeft" : "lookOther");
     const total = 5;
     return checks.length ? { key: checks[0], ok: false, score: Math.max(0, (total - checks.length) / total) } : { key: "ok", ok: true, score: 1 };
   }
@@ -2847,7 +2847,7 @@
   }
   function renderTraits(a, b, R) {
     const ng = noGlobal(R);
-    const open = new Set($$("#traits details[open]").map((d) => d.dataset.id));
+    const open2 = new Set($$("#traits details[open]").map((d) => d.dataset.id));
     const unit = (it) => it.u === "°" ? "°" : "";
     $("#traits").innerHTML = R.traits.map((r) => {
       const t = r.t, na = r.sim == null, p = na ? 0 : Math.round(r.sim);
@@ -2871,7 +2871,7 @@
           body += '<p class="hint">Le contour du visage est le repère le moins stable : il varie avec la pose, la coiffure et la barbe.</p>';
         if (r.rows.some((x) => x.it.u === "é")) body += '<p class="hint">Longueurs en écarts inter-yeux (centre à centre = 1).</p>';
       }
-      return `<details class="trait" data-id="${t.id}"${open.has(t.id) ? " open" : ""}>
+      return `<details class="trait" data-id="${t.id}"${open2.has(t.id) ? " open" : ""}>
       <summary><span class="tname">${t.name}${t.tag ? `<em>${t.tag}</em>` : ""}${r.lens ? "<em>non mesurable : lunettes</em>" : ""}${ng && !STABLE.has(t.id) ? "<em>change avec l'âge</em>" : ""}</span><span class="bar${na ? " na" : ""}"><b data-css="width:${p}%"></b></span><span class="pct">${na ? "—" : `${p} %`}</span></summary>
       <div class="detail">${body}</div></details>`;
     }).join("");
@@ -3123,6 +3123,11 @@
   var album = { faces: [], people: {}, remember: false };
   var seq = 0;
   var selectedCell = null;
+  var baseView = { on: false };
+  function setBaseView(v) {
+    baseView = v;
+    render();
+  }
   var keyOf = (name) => name.trim().replace(/\s+/g, " ").toLowerCase();
   var personOf = (f) => f.person ? album.people[keyOf(f.person)] : null;
   var birthOf = (name) => name ? album.people[keyOf(name)]?.birth || null : null;
@@ -3296,6 +3301,10 @@
     $(".when", card).value = f.date;
     $(".src", card).textContent = f.of > 1 ? `Visage ${f.n}/${f.of} · ${f.src}` : f.src;
     $(".who", card).addEventListener("change", (e) => {
+      if (f.baseRef) {
+        e.target.value = f.person;
+        return;
+      }
       f.person = e.target.value.trim();
       afterEdit();
     });
@@ -3313,8 +3322,10 @@
       selectedCell = null;
       suggestAll();
       render();
+      if (f.baseRef) toast("Retirée de l'album. Elle reste dans votre base (« Gérer ma base » pour la supprimer).");
     });
     card.addEventListener("click", (e) => {
+      if (e.target.closest(".bkeep")) return emit2("base-save", [f]);
       const s = e.target.closest(".sugg");
       if (!s) return;
       f.person = f.suggestion;
@@ -3339,6 +3350,31 @@
       }
       sug.textContent = `C'est ${f.suggestion} ?`;
     } else sug?.remove();
+    const who = $(".who", card);
+    who.readOnly = !!f.baseRef;
+    if (f.baseRef) {
+      who.value = f.person;
+      who.title = "Photo gardée dans votre base sous ce prénom : supprimez-la de la base pour la renommer.";
+      who.setAttribute("aria-describedby", "lockedHint");
+    } else {
+      who.removeAttribute("title");
+      who.removeAttribute("aria-describedby");
+    }
+    let bk = $(".bstate", card);
+    const want = baseView.on ? f.baseRef ? "in" : f.person ? "keep" : "" : "";
+    if (!want) bk?.remove();
+    else {
+      if (!bk || bk.dataset.s !== want) {
+        bk?.remove();
+        bk = document.createElement(want === "keep" ? "button" : "span");
+        bk.className = `bstate${want === "keep" ? " bkeep btn small" : " chip ok"}`;
+        bk.dataset.s = want;
+        if (want === "keep") bk.type = "button";
+        $(".meta.src", card).before(bk);
+      }
+      bk.textContent = want === "keep" ? "Garder dans ma base" : "Dans ma base";
+      if (want === "keep") bk.setAttribute("aria-label", `Garder dans ma base : photo de ${f.person}`);
+    }
   }
   function afterEdit() {
     selectedCell = null;
@@ -3394,7 +3430,7 @@
         const r = S[`${i}-${j}`], ng = r.gap > NO_GLOBAL_GAP, v = Math.round(r.score), pct = ng ? 0 : Math.round(Math.max(0, Math.min(100, v)) * 0.85);
         const far = r.gap > 20, key = `${Math.min(i, j)}-${Math.max(i, j)}`;
         return `<td><button type="button" class="cell${pct > 50 ? " dark" : ""}${far ? " far" : ""}" data-css="--p:${pct}%" data-k="${key}" aria-pressed="${selectedCell === key}"
-      aria-label="${esc(p.name)} et ${esc(q.name)} : ${ng ? "pas de score, photos d'âges trop éloignés" : `${v} %`}, écart d'âge ${Math.round(r.gap)} ans"><b>${ng ? "—" : v}</b><small>Δ ${Math.round(r.gap)} an${Math.round(r.gap) > 1 ? "s" : ""}</small></button></td>`;
+      ><span class="sr-only">${esc(p.name)} et ${esc(q.name)} : </span>${ng ? `<b aria-hidden="true">—</b><span class="sr-only">pas de score, photos d'âges trop éloignés,</span>` : `<b>${v}</b><span class="sr-only"> %,</span>`}<small><span aria-hidden="true">Δ</span><span class="sr-only">écart d'âge</span> ${Math.round(r.gap)} an${Math.round(r.gap) > 1 ? "s" : ""}</small></button></td>`;
       }).join("")}</tr>`
     ).join("");
     $("#matrix").innerHTML = head + `<tbody>${body}</tbody>`;
@@ -3456,6 +3492,15 @@
       name: f.person
     };
   });
+  function albumFace(canvas, det, meta) {
+    album.faces.push(cropEntry(canvas, det, meta));
+  }
+  function albumRefresh() {
+    selectedCell = null;
+    suggestAll();
+    render();
+    refreshAutoAges();
+  }
   function addAlbumFiles(files) {
     return addFiles(files);
   }
@@ -3503,6 +3548,473 @@
     render();
   }
 
+  // src/js/store.js
+  var NAME = "adf-base";
+  var VERSION = 1;
+  var dbp = null;
+  var closedFn = null;
+  var onBaseClosed = (fn) => closedFn = fn;
+  function open(create = false) {
+    if (dbp) return dbp;
+    dbp = new Promise((ok, ko) => {
+      let fresh = false;
+      const r = indexedDB.open(NAME, VERSION);
+      r.onupgradeneeded = () => {
+        fresh = r.result.version === VERSION && !r.result.objectStoreNames.length;
+        if (fresh && !create) {
+          r.transaction.abort();
+          return;
+        }
+        const db = r.result;
+        if (!db.objectStoreNames.contains("items")) db.createObjectStore("items", { keyPath: "id", autoIncrement: true });
+        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
+      };
+      r.onsuccess = () => {
+        const db = r.result;
+        const lost = () => {
+          try {
+            db.close();
+          } catch {
+          }
+          dbp = null;
+          closedFn?.();
+        };
+        db.onversionchange = lost;
+        db.onclose = lost;
+        ok(db);
+      };
+      r.onerror = () => {
+        dbp = null;
+        if (fresh && !create) indexedDB.deleteDatabase(NAME);
+        ko(r.error || new Error("base absente"));
+      };
+      r.onblocked = () => {
+        dbp = null;
+        ko(new Error("base bloquée par un autre onglet"));
+      };
+    });
+    return dbp;
+  }
+  async function run(store, mode2, fn) {
+    const db = await open();
+    const t = db.transaction(store, mode2), s = t.objectStore(store);
+    const out = fn(s);
+    await new Promise((ok, ko) => {
+      t.oncomplete = ok;
+      t.onerror = () => ko(t.error);
+      t.onabort = () => ko(t.error || new Error("transaction annulée"));
+    });
+    return out instanceof IDBRequest ? out.result : out;
+  }
+  async function baseExists() {
+    if (!("indexedDB" in self)) return false;
+    if (indexedDB.databases) {
+      try {
+        return (await indexedDB.databases()).some((d) => d.name === NAME);
+      } catch {
+      }
+    }
+    try {
+      await open(false);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async function createBase() {
+    await open(true);
+    if (!await getMeta("created")) await setMeta("created", (/* @__PURE__ */ new Date()).toISOString());
+  }
+  var getMeta = (key) => run("meta", "readonly", (s) => s.get(key));
+  var setMeta = (key, value) => run("meta", "readwrite", (s) => s.put(value, key));
+  var listItems = () => run("items", "readonly", (s) => s.getAll());
+  var addItem = (item) => run("items", "readwrite", (s) => s.add(item));
+  async function deleteIds(ids) {
+    await run("items", "readwrite", (s) => {
+      for (const id of ids) s.delete(id);
+    });
+  }
+  async function wipeBase() {
+    if (dbp) {
+      try {
+        (await dbp).close();
+      } catch {
+      }
+    }
+    dbp = null;
+    await new Promise((ok, ko) => {
+      const r = indexedDB.deleteDatabase(NAME);
+      r.onsuccess = ok;
+      r.onerror = () => ko(r.error);
+      r.onblocked = () => ko(new Error("bloquée"));
+    });
+  }
+  async function askPersist() {
+    try {
+      if (await navigator.storage?.persisted?.()) return true;
+      return !!await navigator.storage?.persist?.();
+    } catch {
+      return false;
+    }
+  }
+  async function isPersisted() {
+    try {
+      return !!await navigator.storage?.persisted?.();
+    } catch {
+      return false;
+    }
+  }
+
+  // src/js/ui/base.js
+  var YEAR = 365 * 864e5;
+  var ARM_MS = 1e4;
+  var MIN_MS = 600;
+  var base = { on: false, items: [], persisted: false, include: {}, loading: false, gen: 0, saving: false };
+  var keyOf2 = (name) => name.trim().replace(/\s+/g, " ").toLowerCase();
+  var say2 = (t) => {
+    const s = $("#srStatus");
+    if (s) s.textContent = t;
+  };
+  var count = (items = base.items) => {
+    const people2 = new Set(items.map((i) => keyOf2(i.person)));
+    return `${people2.size} personne${people2.size > 1 ? "s" : ""}, ${items.length} photo${items.length > 1 ? "s" : ""}`;
+  };
+  var months = (iso) => Math.max(1, Math.round((Date.now() - Date.parse(iso)) / (30.44 * 864e5)));
+  function twoStep(btn, label, run3) {
+    if (btn.dataset.armed) {
+      if (Date.now() - Number(btn.dataset.at) < MIN_MS) return;
+      clearTimeout(Number(btn.dataset.armed));
+      disarm(btn);
+      run3();
+      return;
+    }
+    btn.dataset.text = btn.textContent;
+    btn.dataset.aria = btn.getAttribute("aria-label") || "";
+    btn.textContent = label.short || label.text;
+    btn.setAttribute("aria-label", label.text);
+    btn.dataset.at = String(Date.now());
+    btn.classList.add("danger");
+    say2(`${label.text} : appuyez de nouveau pour confirmer.`);
+    btn.dataset.armed = String(setTimeout(() => disarm(btn), ARM_MS));
+  }
+  function disarm(btn) {
+    delete btn.dataset.armed;
+    delete btn.dataset.at;
+    btn.textContent = btn.dataset.text;
+    if (btn.dataset.aria) btn.setAttribute("aria-label", btn.dataset.aria);
+    else btn.removeAttribute("aria-label");
+    btn.classList.remove("danger");
+  }
+  async function reload() {
+    try {
+      base.items = base.on ? await listItems() : [];
+      base.include = base.on ? await getMeta("include") || {} : {};
+    } catch (e) {
+      console.warn(e);
+      base.on = false;
+      base.items = [];
+      base.include = {};
+    }
+    const refs = new Set(base.items.map((i) => i.ref));
+    for (const f of album.faces) if (f.baseRef && !refs.has(f.baseRef)) delete f.baseRef;
+    setBaseView({ on: base.on });
+    renderCard();
+  }
+  function renderCard() {
+    $("#baseOff").hidden = base.on;
+    $("#baseOnBox").hidden = !base.on;
+    if (!base.on) return;
+    $("#baseInfo").textContent = base.items.length ? `Sur ce téléphone : ${count()}.` : "Votre base est vide : gardez des photos nommées de l'album.";
+    $("#basePersist").hidden = base.persisted;
+    const pend = album.faces.filter((f) => f.person && !f.baseRef);
+    $("#baseSaveAll").disabled = !pend.length;
+    $("#baseSaveAll").textContent = pend.length ? `Garder les photos nommées (${pend.length})` : "Garder les photos nommées";
+    $("#baseUse2").hidden = !base.items.length;
+  }
+  async function detect() {
+    if (!await baseExists()) return;
+    base.on = true;
+    base.persisted = await isPersisted();
+    await reload();
+    if (!base.on || !base.items.length) return;
+    let created = await getMeta("created");
+    if (!created) await setMeta("created", created = (/* @__PURE__ */ new Date()).toISOString());
+    const reminded = await getMeta("reminded") || created;
+    const yearly = Date.now() - Date.parse(reminded) >= YEAR;
+    $("#baseBarTxt").textContent = yearly ? `Votre base contient ${base.items.length} photo${base.items.length > 1 ? "s" : ""} depuis ${months(created)} mois : garder ou supprimer ?` : `Base trouvée sur ce téléphone : ${count()}.`;
+    $("#baseKeep").hidden = !yearly;
+    $("#baseUse").hidden = yearly;
+    $("#baseBar").hidden = false;
+  }
+  async function enable() {
+    try {
+      await createBase();
+    } catch (e) {
+      console.error(e);
+      toast("Ce navigateur refuse le stockage local (navigation privée ?). La base n'est pas disponible.");
+      return;
+    }
+    base.on = true;
+    base.persisted = await askPersist();
+    await reload();
+    toast(base.persisted ? "Base activée sur ce téléphone." : "Base activée. Le navigateur pourra l'effacer s'il manque de place.");
+    $("#baseSaveAll").focus();
+  }
+  async function wipe() {
+    base.gen++;
+    try {
+      await wipeBase();
+    } catch (e) {
+      console.error(e);
+      toast("La suppression n'a pas abouti : fermez les autres onglets de l'application puis réessayez.");
+      return;
+    }
+    base.on = false;
+    base.items = [];
+    base.include = {};
+    for (const f of album.faces) delete f.baseRef;
+    $("#baseBar").hidden = true;
+    closeDialog();
+    await reload();
+    albumRefresh();
+    toast("Base supprimée de ce téléphone.");
+    emit2("mode", "album");
+    $("#baseEnable").focus();
+  }
+  var MASK = { cy: 0.42, rx: 0.62, ry: 0.72 };
+  async function maskedCrop(f) {
+    const src = f.crop, c = makeCanvas(src.width, src.height), g = c.getContext("2d"), b = f.det.box;
+    g.fillStyle = "#808080";
+    g.fillRect(0, 0, c.width, c.height);
+    g.save();
+    g.beginPath();
+    g.ellipse(b.x + b.width / 2, b.y + b.height * MASK.cy, b.width * MASK.rx, b.height * MASK.ry, 0, 0, Math.PI * 2);
+    g.clip();
+    g.drawImage(src, 0, 0);
+    g.restore();
+    let others = [];
+    try {
+      others = (await findFaces(src)).faces.map((d) => d.detection.box).filter((o) => Math.hypot(o.x + o.width / 2 - b.x - b.width / 2, o.y + o.height / 2 - b.y - b.height / 2) > Math.max(b.width, b.height) * 0.35);
+    } catch (e) {
+      console.warn(e);
+    }
+    if (others.length) {
+      g.save();
+      g.beginPath();
+      g.rect(0, 0, c.width, c.height);
+      g.rect(b.x, b.y, b.width, b.height);
+      g.clip("evenodd");
+      for (const o of others) g.fillRect(o.x - o.width * 0.15, o.y - o.height * 0.25, o.width * 1.3, o.height * 1.4);
+      g.restore();
+    }
+    return c;
+  }
+  var pending2 = [];
+  function askConsent(faces) {
+    if (base.saving) return;
+    pending2 = faces.filter((f) => f.person && !f.baseRef).map((f) => ({ f, person: f.person.trim() }));
+    if (!pending2.length) {
+      toast("Nommez d'abord la personne (« Qui est-ce ? ») pour la garder dans la base.");
+      return;
+    }
+    const names = [...new Map(pending2.map((p) => [keyOf2(p.person), p.person])).values()];
+    $("#consentList").innerHTML = names.map((n, k) => `<label class="check"><input type="checkbox" data-k="${esc(keyOf2(n))}"${k ? "" : " data-autofocus"}> J'ai l'accord de <strong>${esc(n)}</strong> (pour un enfant : de ses parents) pour garder ses photos sur ce téléphone.</label>`).join("");
+    $("#consentGo").disabled = true;
+    $("#consentCount").textContent = `${pending2.length} photo${pending2.length > 1 ? "s" : ""} à garder.`;
+    openDialog($("#consentSheet"));
+  }
+  async function saveConsented() {
+    if (base.saving) return;
+    base.saving = true;
+    const ok = new Set($$("#consentList input:checked").map((i) => i.dataset.k));
+    const todo = pending2.filter((p) => ok.has(keyOf2(p.person)) && !p.f.baseRef);
+    pending2 = [];
+    closeDialog();
+    let n = 0;
+    try {
+      for (const { f, person } of todo) {
+        const masked = await maskedCrop(f);
+        const blob = await new Promise((r) => masked.toBlob(r, "image/jpeg", 0.9));
+        if (!blob?.size) throw new Error("image vide");
+        const ref = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+        await addItem({ kind: "face", ref, person, date: f.date || "", typed: f.typed, added: (/* @__PURE__ */ new Date()).toISOString(), jpeg: blob });
+        f.baseRef = ref;
+        f.person = person;
+        n++;
+      }
+    } catch (e) {
+      console.error(e);
+      toast("Une photo n'a pas pu être gardée (stockage plein ou base supprimée ?).");
+    } finally {
+      base.saving = false;
+    }
+    await reload();
+    albumRefresh();
+    if (n) toast(`${n} photo${n > 1 ? "s" : ""} gardée${n > 1 ? "s" : ""} dans la base.`);
+    const first = todo.find((p) => p.f.baseRef);
+    if (first) setTimeout(() => $(`#albumGrid [data-id="${first.f.id}"] .who`)?.focus(), 0);
+  }
+  async function useBase() {
+    if (base.loading) return;
+    base.loading = true;
+    const st = $("#albumStatus");
+    try {
+      $("#baseBar").hidden = true;
+      closeDialog();
+      await reload();
+      const loaded = new Set(album.faces.map((f) => f.baseRef).filter(Boolean));
+      const todo = base.items.filter((i) => i.kind === "face" && base.include[keyOf2(i.person)] !== false && !loaded.has(i.ref));
+      emit2("mode", "album");
+      $("#albumAdd").focus();
+      if (!todo.length) {
+        toast(base.items.length ? "Rien de nouveau à charger depuis la base." : "La base est vide.");
+        return;
+      }
+      const gen = base.gen;
+      if (!engine.ready) st.textContent = "Chargement de la base : en attente du moteur d'analyse…";
+      while (!engine.ready && !engine.failed && gen === base.gen) await new Promise((r) => setTimeout(r, 300));
+      if (engine.failed) return toast("Moteur d'analyse indisponible : la base n'a pas pu être chargée.");
+      let done = 0, lost = 0, added = 0;
+      for (const it of todo) {
+        await enqueue(async () => {
+          if (gen !== base.gen || !base.items.some((i) => i.ref === it.ref)) return;
+          st.textContent = `Base : photo ${done + 1} sur ${todo.length}…`;
+          try {
+            const bmp = await createImageBitmap(it.jpeg);
+            const c = makeCanvas(bmp.width, bmp.height);
+            c.getContext("2d").drawImage(bmp, 0, 0);
+            const { work: work2, faces } = await findFaces(c);
+            if (!faces.length || gen !== base.gen) lost++;
+            else {
+              const mid = (d) => Math.hypot(d.detection.box.x + d.detection.box.width / 2 - c.width / 2, d.detection.box.y + d.detection.box.height / 2 - c.height / 2);
+              const det = await describe(work2, faces.reduce((a, b) => mid(b) < mid(a) ? b : a), c);
+              if (gen !== base.gen || !base.items.some((i) => i.ref === it.ref)) return;
+              albumFace(c, det, { date: it.date, src: "Ma base", n: 1, of: 1, person: it.person, typed: it.typed, baseRef: it.ref });
+              added++;
+            }
+          } catch (e) {
+            console.error(e);
+            lost++;
+          }
+          done++;
+          albumRefresh();
+        });
+      }
+      if (gen === base.gen) toast(`${added} photo${added > 1 ? "s" : ""} chargée${added > 1 ? "s" : ""} depuis la base${lost ? ` ; ${lost} sans visage retrouvé` : ""}.`);
+    } finally {
+      st.textContent = "";
+      base.loading = false;
+    }
+  }
+  async function renderManage() {
+    const groups = /* @__PURE__ */ new Map();
+    for (const it of base.items) {
+      const k = keyOf2(it.person);
+      if (!groups.has(k)) groups.set(k, { name: it.person, items: [] });
+      groups.get(k).items.push(it);
+    }
+    $("#manageInfo").textContent = base.items.length ? `${count()} sur ce téléphone. Désinstaller l'application ou effacer les données du site supprime aussi la base.` : "La base est vide.";
+    const box = $("#manageList");
+    box.innerHTML = [...groups].map(([k, g]) => `<div class="mperson" data-k="${esc(k)}">
+      <div class="mhead"><strong>${esc(g.name)}</strong><span class="hint">${g.items.length} photo${g.items.length > 1 ? "s" : ""}</span>
+        <label class="check"><input type="checkbox" class="minc"${base.include[k] === false ? "" : " checked"}> Charger ${esc(g.name)} dans l'album</label>
+        <button type="button" class="btn small mdelp">Supprimer ${esc(g.name)}</button></div>
+      <div class="mthumbs">${g.items.map((it) => `<div class="mthumb" data-id="${it.id}"><canvas width="72" height="72" role="img" aria-label="Photo de ${esc(g.name)}${it.date ? `, ${esc(it.date)}` : it.typed != null ? `, ${esc(ageLabel(it.typed))}` : ""}"></canvas><button type="button" class="x" aria-label="Supprimer cette photo de ${esc(g.name)}">✕</button></div>`).join("")}</div></div>`).join("");
+    for (const el2 of $$(".mthumb", box)) {
+      const it = base.items.find((i) => String(i.id) === el2.dataset.id);
+      try {
+        const bmp = await createImageBitmap(it.jpeg), cv = $("canvas", el2), g = cv.getContext("2d"), s = Math.min(bmp.width, bmp.height);
+        g.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 72, 72);
+      } catch {
+      }
+    }
+    $("#manageUse").hidden = !base.items.length;
+  }
+  async function deleteFrom(ids, what, nextFocus) {
+    let failed = false;
+    try {
+      await deleteIds(ids);
+    } catch (e) {
+      console.error(e);
+      failed = true;
+    }
+    await reload();
+    const left = new Set(base.items.map((i) => keyOf2(i.person)));
+    let changed = false;
+    for (const k of Object.keys(base.include)) if (!left.has(k)) {
+      delete base.include[k];
+      changed = true;
+    }
+    if (changed && base.on) await setMeta("include", base.include).catch(() => {
+    });
+    albumRefresh();
+    await renderManage();
+    toast(failed ? "La suppression n'a pas abouti." : `${what} supprimée${ids.length > 1 ? "s" : ""} de la base.`);
+    (nextFocus && $(nextFocus) || $("#manageList .x") || $("#manageSheet [data-close]"))?.focus();
+  }
+  function initBase() {
+    onBaseClosed(() => {
+      base.gen++;
+      baseExists().then((yes) => {
+        base.on = yes;
+        if (!yes) {
+          $("#baseBar").hidden = true;
+          if (!$("#manageSheet").hidden || !$("#consentSheet").hidden) closeDialog();
+          $("#manageList").innerHTML = "";
+          pending2 = [];
+        }
+        return reload();
+      }).then(() => albumRefresh()).catch((e) => console.warn(e));
+    });
+    $("#baseEnable").addEventListener("click", enable);
+    $("#baseSaveAll").addEventListener("click", () => askConsent(album.faces));
+    on("base-save", (faces) => askConsent(faces));
+    $("#consentList").addEventListener("change", () => {
+      $("#consentGo").disabled = !$$("#consentList input:checked").length;
+    });
+    $("#consentGo").addEventListener("click", saveConsented);
+    for (const b of [$("#baseUse"), $("#baseUse2"), $("#manageUse")]) b.addEventListener("click", useBase);
+    const manage = async () => {
+      $("#baseBar").hidden = true;
+      await reload();
+      if (!base.on) return toast("Aucune base sur ce téléphone.");
+      await renderManage();
+      openDialog($("#manageSheet"));
+    };
+    for (const b of [$("#baseManage"), $("#baseManage2")]) b.addEventListener("click", manage);
+    $("#baseKeep").addEventListener("click", async () => {
+      await setMeta("reminded", (/* @__PURE__ */ new Date()).toISOString());
+      $("#baseBar").hidden = true;
+      toast("Base gardée. Prochain rappel dans un an.");
+      $("#tab-comparer")?.focus();
+    });
+    const all = { text: "Confirmer : tout supprimer (toute la base)", short: "Confirmer : tout supprimer" };
+    for (const b of [$("#baseBarWipe"), $("#baseWipe"), $("#manageWipe")]) b.addEventListener("click", (e) => twoStep(e.currentTarget, all, wipe));
+    $("#manageList").addEventListener("click", (e) => {
+      const x = e.target.closest(".mthumb .x"), p = e.target.closest(".mdelp");
+      if (x) {
+        const th = x.closest(".mthumb"), id = Number(th.dataset.id), who = th.closest(".mperson").querySelector("strong").textContent;
+        const next = th.nextElementSibling || th.previousElementSibling;
+        twoStep(x, { text: `Confirmer la suppression de cette photo de ${who}`, short: "✕" }, () => deleteFrom([id], "Photo", next ? `.mthumb[data-id="${next.dataset.id}"] .x` : null));
+      } else if (p) {
+        const k = p.closest(".mperson").dataset.k;
+        const ids = base.items.filter((i) => keyOf2(i.person) === k).map((i) => i.id);
+        twoStep(p, { text: `Confirmer la suppression de ${p.textContent.replace(/^Supprimer /, "")}` }, () => deleteFrom(ids, "Photos"));
+      }
+    });
+    $("#manageList").addEventListener("change", async (e) => {
+      const c = e.target.closest(".minc");
+      if (!c) return;
+      base.include[c.closest(".mperson").dataset.k] = c.checked;
+      await setMeta("include", base.include).catch(() => {
+      });
+    });
+    on("faces", renderCard);
+    renderCard();
+    detect().catch((e) => console.error(e));
+  }
+  var baseState = () => ({ on: base.on, items: base.items.length, people: new Set(base.items.map((i) => keyOf2(i.person))).size, persisted: base.persisted, loading: base.loading });
+
   // src/js/ui/sources.js
   function faceSources() {
     const fromSlots = slots.filter((s) => s.status === "ok").map((s) => ({
@@ -3546,9 +4058,9 @@
       model ? `<li class="ok">Modèle familial choisi (un parent photographié à l'âge cible, comme le font les portraitistes)</li>` : "<li>Facultatif : un parent photographié à l'âge cible rend la forme adulte plus plausible</li>"
     ];
     $("#agNeed").innerHTML = need.join("");
-    run();
+    run2();
   }
-  function run() {
+  function run2() {
     if (target == null) return;
     const s = findSource($("#agSrc").value);
     if (!s) return;
@@ -3579,12 +4091,12 @@
       if (!b) return;
       target = +b.dataset.age;
       $$("#agTarget button").forEach((x) => x.setAttribute("aria-pressed", x === b));
-      run();
+      run2();
     });
     ["agSrc", "agSex", "agModel"].forEach((id) => $(`#${id}`).addEventListener("change", refresh2));
     $("#agW").addEventListener("input", (e) => {
       $("#agWv").textContent = `${e.target.value} %`;
-      run();
+      run2();
     });
     $("#agUse").addEventListener("click", () => {
       if (!last) return;
@@ -3865,7 +4377,7 @@
       clearAll();
       clearAlbum();
       clearCompareCache();
-      toast("Tout est effacé.", {
+      toast(baseState().on ? "Comparaisons et album effacés. Votre base sur ce téléphone est conservée (Album, « Gérer ma base »)." : "Tout est effacé.", {
         label: "Annuler",
         run: () => {
           restoreSlots(slotsBackup);
@@ -3884,6 +4396,7 @@
     $("#privacyBtn").addEventListener("click", () => openDialog($("#privacySheet")));
     initResults();
     initAlbum();
+    initBase();
     setBirthLookup(birthOf);
     initAging();
     initFusion();
@@ -3940,6 +4453,13 @@
     guide,
     GUIDE,
     camState,
+    baseState,
+    albumInject: (canvas, det, meta) => {
+      albumFace(canvas, det, meta);
+      albumRefresh();
+    },
+    // Cadres des visages de l'album (coordonnées du recadrage), pour vérifier le masquage (AdF-044).
+    albumBoxes: () => album.faces.map((f) => ({ x: f.det.box.x, y: f.det.box.y, w: f.det.box.width, h: f.det.box.height, kept: !!f.baseRef })),
     live: { detectLive, liveMeasure, lumStats },
     moteur: { normalize, measures, symmetrize, appearance, sampleColors, quality }
   };

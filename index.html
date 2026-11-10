@@ -32,6 +32,10 @@
       <span class="qstat" id="queueTxt" aria-live="polite"></span>
       <button id="installBtn" class="btn primary" type="button" hidden>Installer l'application</button>
     </div>
+    <div class="card basebar" id="baseBar" role="region" aria-label="Ma base sur ce téléphone" hidden>
+      <p id="baseBarTxt"></p>
+      <div class="actions"><button type="button" class="btn primary" id="baseUse">Utiliser</button><button type="button" class="btn primary" id="baseKeep" hidden>Garder</button><button type="button" class="btn" id="baseManage">Gérer</button><button type="button" class="btn" id="baseBarWipe">Tout supprimer</button></div>
+    </div>
   </header>
 
   <nav class="modes" role="tablist" aria-label="Modes">
@@ -126,6 +130,19 @@
       <div class="people" id="people"></div>
       <label class="check mt10"><input type="checkbox" id="rememberPeople"> Mémoriser les prénoms et dates de naissance sur cet appareil (jamais les photos)</label>
     </div>
+    <div class="card basecard" id="baseCard">
+      <div class="hhead"><h3>Ma base sur ce téléphone</h3></div>
+      <div id="baseOff">
+        <p class="hint">Gardez les photos de l'album sur ce téléphone pour les retrouver la prochaine fois, sans les réimporter. Désactivée par défaut ; rien n'est envoyé ; les mesures du visage ne sont jamais enregistrées (recalculées à chaque chargement).</p>
+        <button type="button" class="btn" id="baseEnable">Activer ma base</button>
+      </div>
+      <div id="baseOnBox" hidden>
+        <p class="hint" id="baseInfo"></p>
+        <p class="hint" id="basePersist" hidden>Le navigateur n'a pas garanti la conservation : il pourrait effacer la base s'il manque de place.</p>
+        <div class="actions"><button type="button" class="btn" id="baseSaveAll">Garder les photos nommées</button><button type="button" class="btn" id="baseUse2" hidden>Charger ma base dans l'album</button><button type="button" class="btn" id="baseManage2">Gérer ma base</button><button type="button" class="btn" id="baseWipe">Supprimer la base</button></div>
+        <p class="hint">Désinstaller l'application ou effacer les données du site supprime aussi la base.</p>
+      </div>
+    </div>
     <div class="album-grid" id="albumGrid"></div>
     <p class="hint" id="albumEmpty">Aucune photo pour l'instant. Astuce : les dates de prise de vue sont lues automatiquement quand la photo les contient.</p>
     <datalist id="peopleList"></datalist>
@@ -203,7 +220,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.3.2</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.4.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -265,14 +282,16 @@
   </div>
 </div>
 
+<span id="lockedHint" class="sr-only">Photo gardée dans votre base sous ce prénom : supprimez-la de la base pour la renommer.</span>
 <div class="sheet" id="privacySheet" hidden role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
   <div class="sheet-in prose">
     <div class="sheet-head"><h3 id="privacyTitle">Confidentialité et mentions</h3><button type="button" class="btn" data-close data-autofocus>Fermer</button></div>
     <h4>Vos photos restent sur l'appareil</h4>
-    <p>Toute l'analyse se fait dans le navigateur de votre téléphone. Aucune photo, aucune vidéo et aucune empreinte de visage n'est envoyée ni conservée : tout disparaît à la fermeture de la page.</p>
+    <p>Toute l'analyse se fait dans le navigateur de votre téléphone. Aucune photo, aucune vidéo et aucune empreinte de visage n'est envoyée. Rien n'est conservé à la fermeture de la page, sauf ce que vous choisissez de mémoriser : les prénoms et dates de naissance, et « Ma base » (voir ci-dessous).</p>
     <h4>Ce qui peut être mémorisé</h4>
     <p>La prise de vue guidée utilise la caméra du téléphone seulement pendant la prise : l'image n'est ni enregistrée ni envoyée, et la caméra s'arrête dès la fermeture de la fenêtre.</p>
-    <p>Seulement si vous cochez « Mémoriser les prénoms et dates de naissance » dans l'album : prénoms et dates de naissance, sur cet appareil. Décochez la case pour les effacer. Rien d'autre n'est enregistré, et aucun compte n'existe.</p>
+    <p>Seulement si vous cochez « Mémoriser les prénoms et dates de naissance » dans l'album : prénoms et dates de naissance, sur cet appareil. Décochez la case pour les effacer.</p>
+    <p>Seulement si vous activez « Ma base » dans l'album, et pour chaque personne dont vous confirmez l'accord : les photos recadrées que vous choisissez de garder, avec leur prénom, leur date ou l'âge saisi. Elles restent dans le navigateur de cet appareil, ne sont jamais envoyées, et les mesures du visage ne sont jamais enregistrées. Vous pouvez supprimer une photo, une personne ou toute la base à tout moment ; un rappel vous le propose chaque année. Désinstaller l'application ou effacer les données du site supprime la base. Aucun compte n'existe.</p>
     <h4>Données de visage</h4>
     <p>Les mesures d'un visage sont des données biométriques. Elles sont calculées en mémoire, pour la comparaison en cours, puis effacées. Si vous confirmez des lunettes, cela sert seulement à ne pas noter les mesures des yeux vues à travers les verres : rien n'est enregistré.</p>
     <h4>Les personnes photographiées</h4>
@@ -281,6 +300,24 @@
     <p>La ressemblance est une simulation : elle ne prouve ni n'exclut un lien de parenté. Les images des modes Vieillir et Fusion sont des images simulées et portent cette mention.</p>
     <h4>Mentions</h4>
     <p>Site personnel, gratuit et non commercial. Hébergement : GitHub Pages (GitHub, Inc.), qui reçoit, comme tout hébergeur, l'adresse IP des visiteurs pour servir les pages. Le site ne dépose aucun cookie et n'utilise aucun outil de mesure d'audience. Signaler un problème : page « Security » du dépôt Metazel/air-de-famille sur GitHub.</p>
+  </div>
+</div>
+
+<div class="sheet" id="consentSheet" hidden role="dialog" aria-modal="true" aria-labelledby="consentTitle">
+  <div class="sheet-in">
+    <div class="sheet-head"><h3 id="consentTitle">Garder dans ma base</h3><button type="button" class="btn" data-close>Fermer</button></div>
+    <p class="hint"><span id="consentCount"></span> Les photos restent sur ce téléphone, jamais envoyées. Cochez chaque personne dont vous avez l'accord : seules ses photos seront gardées.</p>
+    <div id="consentList"></div>
+    <div class="actions"><button type="button" class="btn primary" id="consentGo" disabled>Garder</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="manageSheet" hidden role="dialog" aria-modal="true" aria-labelledby="manageTitle">
+  <div class="sheet-in">
+    <div class="sheet-head"><h3 id="manageTitle">Ma base</h3><button type="button" class="btn" data-close data-autofocus>Fermer</button></div>
+    <p class="hint" id="manageInfo"></p>
+    <div id="manageList"></div>
+    <div class="actions"><button type="button" class="btn primary" id="manageUse">Charger dans l'album</button><button type="button" class="btn" id="manageWipe">Tout supprimer</button></div>
   </div>
 </div>
 
