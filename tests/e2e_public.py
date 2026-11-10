@@ -533,6 +533,117 @@ with sync_playwright() as p:
         check("Hors ligne : page servie par le cache", False, e)
     ctx.set_offline(False)
 
+    # Base locale (lot 3, CU8, AdF-020) : désactivée par défaut, accord par personne, détection au lancement,
+    # rappel annuel, suppression d'une photo et de tout. Visages synthétiques, jamais de vraie photo.
+    def recharger():
+        page.reload(wait_until="load")
+        attendre(page, "!!window.AirDeFamille", 20000)
+        page.wait_for_timeout(800)
+    page.click("#tab-album")
+    page.wait_for_timeout(200)
+    idb = page.evaluate("indexedDB.databases().then(d=>d.map(x=>x.name))")
+    check("Base : désactivée par défaut, aucune base créée", page.is_visible("#baseEnable") and not idb and not page.evaluate("AirDeFamille.baseState().on"), idb)
+    page.click("#baseEnable")
+    attendre(page, "AirDeFamille.baseState().on", 5000)
+    check("Base : activation explicite, base créée sur l'appareil", "adf-base" in page.evaluate("indexedDB.databases().then(d=>d.map(x=>x.name))"))
+    page.evaluate(FAKE)
+    page.evaluate("""() => { const A = window.AirDeFamille; const a = __fakeFace(1, {age: 40, family: 1}), b = __fakeFace(2, {age: 12, family: 1}), c = __fakeFace(3, {age: 30});
+      A.albumInject(a.canvas, a.det, {person: 'Paul', date: '2020-05', src: 'test', n: 1, of: 1});
+      A.albumInject(b.canvas, b.det, {person: 'Léa', date: '2021-06', src: 'test', n: 1, of: 1});
+      A.albumInject(c.canvas, c.det, {person: '', src: 'test', n: 1, of: 1}); }""")
+    page.wait_for_timeout(300)
+    run_axe(page, "album avec photos et matrice (AdF-041)")
+    check("Base : « Garder » proposé seulement pour les photos nommées", page.locator("#albumGrid .bkeep").count() == 2, page.locator("#albumGrid .bkeep").count())
+    page.click("#baseSaveAll")
+    page.wait_for_timeout(200)
+    check("Base : accord demandé pour chaque personne avant tout ajout", page.is_visible("#consentSheet") and page.locator("#consentList input").count() == 2 and page.is_disabled("#consentGo"))
+    run_axe(page, "base : accord des personnes")
+    page.check("#consentList input[data-k='paul']")
+    page.click("#consentGo")
+    attendre(page, "AirDeFamille.baseState().items === 1", 5000)
+    check("Base : seules les photos des personnes ayant donné leur accord sont gardées", page.evaluate("(({on, items, people, loading}) => ({on, items, people, loading}))(AirDeFamille.baseState())") == {"on": True, "items": 1, "people": 1, "loading": False} and "Dans ma base" in page.inner_text("#albumGrid"))
+    gardee = page.evaluate("""() => new Promise((ok) => { const r = indexedDB.open('adf-base'); r.onsuccess = () => { const t = r.result.transaction('items').objectStore('items').getAll(); t.onsuccess = () => { const it = t.result[0]; ok(Object.keys(it).sort()); r.result.close(); }; }; })""")
+    w_ = page.locator("#albumGrid .aface:has(.chip.ok) .who").first
+    check("Base : prénom verrouillé pour une photo gardée, atteignable au clavier avec son explication (AdF-042, AdF-045)", w_.evaluate("e => e.readOnly && !e.disabled && e.getAttribute('aria-describedby') === 'lockedHint'"))
+    check("Base : après l'enregistrement, le focus va au prénom de la carte (AdF-045)", page.evaluate("document.activeElement.classList.contains('who') && !!document.activeElement.closest('.aface').querySelector('.chip.ok')"))
+    gris = page.evaluate("""() => new Promise((ok) => { const r = indexedDB.open('adf-base'); r.onsuccess = () => { const t = r.result.transaction('items').objectStore('items').getAll(); t.onsuccess = async () => {
+      const bmp = await createImageBitmap(t.result[0].jpeg), c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+      const px = (x, y) => Array.from(g.getImageData(Math.round(x), Math.round(y), 1, 1).data.slice(0, 3)); r.result.close();
+      const b = AirDeFamille.albumBoxes().find((q) => q.kept), cx = b.x + b.w / 2, cy = b.y + b.h * 0.42;
+      ok([px(2, 2), px(bmp.width - 3, bmp.height - 3), px(cx + b.w * 0.62 + 6, cy), px(cx - b.w * 0.62 - 6, cy), px(cx, cy + b.h * 0.72 + 6)]); }; }; })""")
+    check("Base : tout ce qui est hors du visage est masqué avant l'enregistrement, juste au bord de l'ellipse compris (aucun tiers, AdF-042, AdF-044)", all(abs(v - 128) <= 6 for p_ in gris for v in p_), gris)
+    check("Base : ni empreinte ni mesure enregistrée (photo recadrée et informations seulement)", not any(k in gardee for k in ("det", "desc", "descriptor", "measures")) and "jpeg" in gardee, gardee)
+    recharger()
+    check("Base : détectée au lancement avec le nombre de personnes et de photos", page.is_visible("#baseBar") and "1 personne, 1 photo" in page.inner_text("#baseBar"), page.inner_text("#baseBar") if page.is_visible("#baseBar") else "")
+    run_axe(page, "base : bandeau au lancement")
+    page.evaluate("""() => new Promise((ok) => { const r = indexedDB.open('adf-base'); r.onsuccess = () => { const db = r.result, t = db.transaction('meta', 'readwrite'), old = new Date(Date.now() - 400 * 864e5).toISOString();
+      t.objectStore('meta').put(old, 'created'); t.objectStore('meta').put(old, 'reminded'); t.oncomplete = () => { db.close(); ok(); }; }; })""")
+    recharger()
+    bar = page.inner_text("#baseBar") if page.is_visible("#baseBar") else ""
+    check("Base : rappel annuel « garder ou supprimer ? »", "garder ou supprimer" in bar and page.is_visible("#baseKeep"), bar)
+    page.click("#baseKeep")
+    page.wait_for_timeout(300)
+    recharger()
+    check("Base : « Garder » repousse le rappel d'un an", "Base trouvée" in (page.inner_text("#baseBar") if page.is_visible("#baseBar") else ""))
+    page.click("#baseManage")
+    page.wait_for_timeout(400)
+    check("Base : écran « Ma base » par personne, avec choix du chargement", page.is_visible("#manageSheet") and "Paul" in page.inner_text("#manageList") and "Charger Paul dans l'album" in page.inner_text("#manageList"))
+    run_axe(page, "base : écran Ma base")
+    page.uncheck("#manageList .minc")
+    page.wait_for_timeout(300)
+    page.click("#manageUse")
+    page.wait_for_timeout(800)
+    check("Base : une personne décochée n'est pas chargée", "Rien de nouveau à charger" in page.inner_text("#toasts"), page.inner_text("#toasts")[-120:])
+    page.click("#baseManage2")
+    page.wait_for_timeout(400)
+    page.check("#manageList .minc")
+    page.wait_for_timeout(300)
+    page.evaluate("() => { const b = document.querySelector('#manageUse'); b.click(); b.click(); }")
+    try:
+        attendre(page, "document.querySelector('#toasts').textContent.includes('depuis la base')", 60000)
+    except TimeoutError:
+        pass
+    page.wait_for_timeout(1500)
+    tt = page.inner_text("#toasts")
+    check("Base : chargement unique malgré un double appui, empreinte recalculée (visage synthétique non détecté : signalé sans erreur)", tt.count("chargée depuis la base") == 1 and "sans visage retrouvé" in tt, tt[-160:])
+    page.click("#baseManage2")
+    page.wait_for_timeout(400)
+    x = page.locator("#manageList .mthumb .x").first
+    x.click()
+    page.wait_for_timeout(100)
+    arme = [page.evaluate("AirDeFamille.baseState().items"), x.get_attribute("aria-label")]
+    page.wait_for_timeout(700)
+    x.click()
+    attendre(page, "AirDeFamille.baseState().items === 0", 5000)
+    check("Base : suppression d'une photo en deux appuis, nom du bouton mis à jour", arme[0] == 1 and "Confirmer" in (arme[1] or "") and page.evaluate("AirDeFamille.baseState().items") == 0, arme)
+    check("Base : focus gardé dans la fenêtre après suppression", page.evaluate("!!document.activeElement.closest('#manageSheet')"))
+    page.keyboard.press("Escape")
+    # Deux onglets : une suppression dans l'un, l'autre ne recrée rien (AdF-042)
+    p2 = ctx.new_page()
+    p2.goto(base + "index.html", wait_until="load")
+    attendre(p2, "!!window.AirDeFamille && AirDeFamille.baseState().on", 20000)
+    p2.click("#tab-album")
+    p2.click("#baseWipe")
+    p2.wait_for_timeout(700)
+    p2.click("#baseWipe")
+    attendre(p2, "!AirDeFamille.baseState().on", 10000)
+    p2.close()
+    try:
+        attendre(page, "!AirDeFamille.baseState().on", 10000)
+    except TimeoutError:
+        pass
+    page.wait_for_timeout(500)
+    check("Base : supprimée dans un autre onglet, cet onglet repasse à « désactivée » sans rien recréer", not page.evaluate("AirDeFamille.baseState().on") and not page.evaluate("indexedDB.databases().then(d=>d.map(x=>x.name))") and page.is_visible("#baseEnable"))
+    page.click("#baseEnable")
+    attendre(page, "AirDeFamille.baseState().on", 5000)
+    page.dblclick("#baseWipe")
+    page.wait_for_timeout(300)
+    check("Base : un double appui rapide ne supprime pas la base (AdF-044)", page.evaluate("AirDeFamille.baseState().on") and "Confirmer" in page.inner_text("#baseWipe"))
+    page.wait_for_timeout(500)
+    page.click("#baseWipe")
+    attendre(page, "!AirDeFamille.baseState().on", 5000)
+    check("Base : « Supprimer la base » efface la base du navigateur, focus sur « Activer »", not page.evaluate("indexedDB.databases().then(d=>d.map(x=>x.name))") and page.evaluate("document.activeElement.id") == "baseEnable")
+
     check("Aucune requête vers un autre site (fin des tests, service worker compris)", not external, external[:5])
     try:
         viol = page.evaluate("window.__csp || []")

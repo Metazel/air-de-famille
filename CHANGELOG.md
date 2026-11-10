@@ -3,6 +3,30 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.4.0] — 2026-11-10
+
+Ma base sur ce téléphone (lot 3, CU8, AdF-020), décidée par David le 08/11 (option A).
+
+- Désactivée par défaut ; activation explicite dans l'Album. Les photos de l'album peuvent alors être
+  gardées sur le téléphone (photo recadrée, prénom, date ou âge saisi), seulement après l'accord de
+  chaque personne (ou de ses parents pour un enfant).
+- Jamais d'empreinte ni de mesure enregistrée : elles sont recalculées à chaque chargement.
+- Au lancement : « Base trouvée sur ce téléphone : N personnes, M photos », avec Utiliser, Gérer,
+  Tout supprimer. Rappel chaque année : garder ou supprimer ?
+- Écran « Ma base » : par personne, inclusion dans l'analyse, suppression d'une photo, d'une
+  personne ou de tout, immédiate et confirmée (deux appuis). Stockage persistant demandé au navigateur.
+- Prête pour les iris (AdF-039) : chaque élément porte son type.
+- Accessibilité (AdF-041) : contraste et nom accessible des cases de la matrice de l'Album ; les
+  messages en bas d'écran ne bloquent plus les boutons situés dessous.
+- Relecture séparée (AdF-042, AdF-043) : tout ce qui est hors du visage est masqué en gris avant
+  l'enregistrement (aucun tiers gardé) ; prénom figé au moment de l'accord, puis verrouillé ; une
+  base supprimée dans un autre onglet n'est jamais recréée ; chargement protégé contre le double
+  appui ; suppression en deux appuis avec nom annoncé ; focus maîtrisé.
+- Seconde relecture (AdF-044, AdF-045) : masque resserré au visage et autres visages détectés masqués ;
+  un double appui rapide ne confirme plus une suppression (600 ms au moins entre les deux appuis) ;
+  prénom verrouillé lisible au clavier ; nom du fichier d'origine plus enregistré.
+- Tests : 113 contrôles e2e publics (deux onglets, double appui, masquage au bord du visage, inclusion).
+
 ## [v2.3.2] — 2026-11-09
 
 Grand écart d'âge (AdF-038), après l'essai parent-enfant de David.
