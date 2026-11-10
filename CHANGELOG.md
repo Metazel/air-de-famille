@@ -3,6 +3,35 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.5.1] — 2026-11-10
+
+Corrections de l'onglet Iris après l'essai de David sur téléphone (AdF-056 à AdF-060).
+
+- Bord de l'iris sur une photo ordinaire (AdF-056) : recherche repensée (zones sombres candidates, bord régulier
+  sur les côtés, blanc de l'œil des deux côtés). Sur la photo d'essai de David, le bord est désormais juste.
+  Photo trop difficile (œil petit, peu contrasté) : repères à placer à la main plutôt qu'un cercle faux.
+- Reflets gris (fenêtre sur un iris foncé, AdF-057) : repérés et exclus des mesures ; les points blancs isolés
+  ne sont plus pris pour des reflets.
+- Grande photo de téléphone (AdF-058) : l'iris est repéré sur la photo réduite puis découpé dans la photo
+  d'origine, à pleine résolution. Iris de moins de 300 px : un seul avertissement au lieu de sept lignes.
+- Iris foncé : le seuil « iris flou ou sans motif » tient compte de la clarté de l'iris.
+- Essai du selfie éclairé par l'écran retiré (AdF-059 : impossible de viser, photo floue). Conseils pour réussir
+  la photo de l'œil (caméra arrière, macro ou zoom ×2, lumière de côté, rafale) (AdF-060).
+- Relecture séparée (AdF-061, AdF-062) : iris clair (bleu, gris) repéré par le bord de sa pupille ; photo d'origine
+  gardée, découpe refaite à pleine résolution après une correction à la main ; taille de l'iris jugée en pleine
+  résolution ; collerette claire jamais prise pour un reflet ; iris foncé et flou non mesuré ; calcul rendu par
+  étapes (écran jamais figé) ; avertissement « iris trop petit » en bloc annoncé ; découpe en lissage haute qualité.
+- Photo JPEG avec un reflet dans la pupille : iris de nouveau repéré (AdF-063) ; position de la collerette et
+  netteté mesurées par secteurs, insensibles à une crypte, un reflet ou au bord de la pupille ; photo en cours
+  d'ouverture signalée tout de suite.
+- Relecture séparée finale : découpe et repères appliqués ensemble (fermer la fenêtre pendant la découpe abandonne
+  la correction) ; « Tout effacer » puis « Annuler » pendant l'ouverture d'une photo sans emplacement bloqué ;
+  un cercle plus grand n'est retenu comme iris que si l'anneau porte des motifs (ombre d'orbite écartée) ;
+  secteurs de collerette sans saut net écartés.
+- Tests : 173 contrôles e2e publics (grande photo, petit iris en pleine résolution, chemin manuel, photo pivotée
+  EXIF, iris bleu, iris foncé flou, collerette claire). Régression privée des visages : 0,000000. Banc iris privé :
+  17 côtés sur 19 mesurables identiques au prototype ; échelle de la collerette recalée sur le banc (0,15).
+
 ## [v2.5.0] — 2026-11-10
 
 Onglet « Iris » (AdF-039), cadrage validé par David le 10/11 (MVP I1 à I5, exigences R1 à R9).

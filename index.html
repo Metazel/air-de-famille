@@ -218,11 +218,19 @@
       <label class="check"><input type="checkbox" id="irisAgree"> J'ai l'accord de chaque personne dont j'analyse l'iris (pour un enfant : de ses parents). L'iris identifie une personne plus sûrement qu'une empreinte digitale : rien n'est envoyé, et rien n'est gardé sans mon choix.</label>
     </div>
     <ul class="tips">
-      <li>Un gros plan net de l'œil (photo de photographe ou de très près), sans filtre</li>
-      <li>Même œil pour tout le monde si possible (gauche ou droit), indiqué pour chacun</li>
-      <li>Iris 1 : la personne ; iris 2 et 3 : ses parents</li>
-      <li>Selfie enregistré en miroir : indiquez l'autre œil</li>
+      <li>Iris 1 : la personne ; iris 2 et 3 : ses parents ; le même œil pour tous si possible</li>
+      <li>Iris d'au moins 300 px de diamètre pour mesurer les motifs (en dessous : comparaison à l'œil)</li>
     </ul>
+    <details class="card irisconseils">
+      <summary>Réussir la photo de l'œil</summary>
+      <ul>
+        <li>Faites-vous photographier par un proche, avec la caméra arrière (bien plus nette que la caméra avant).</li>
+        <li>Mode macro, ou zoom ×2 à 20-30 cm : de trop près, la mise au point ne se fait pas.</li>
+        <li>Lumière du jour, de côté (près d'une fenêtre, pas en face) ; sans flash.</li>
+        <li>Regard dans l'objectif, œil grand ouvert ; prenez une rafale et gardez la plus nette.</li>
+        <li>L'iris doit occuper au moins un tiers de la largeur de la photo ; recadrez-la si besoin.</li>
+      </ul>
+    </details>
     <section class="irisslots" id="irisSlots" aria-label="Iris à comparer"></section>
     <p class="hint" id="irisNoBase">Pour garder vos iris sur ce téléphone et ne pas refaire les repères, activez « Ma base » dans l'Album.</p>
     <div class="actions"><button class="btn primary" type="button" id="irisGo" disabled>Comparer les iris</button><button class="btn small" type="button" id="irisCancel" hidden>Annuler</button><span class="qstat" id="irisStatus"></span></div>
@@ -235,17 +243,13 @@
       </div>
       <div class="card">
         <div class="hhead mb8"><h2>Motif par motif</h2></div>
+        <p class="warnbox" id="irisSmallWarn" role="note" hidden></p>
         <p class="chip warn hintchip" id="irisEyeWarn" hidden>Vous comparez un œil gauche et un œil droit : les bandes sont remises dans le même sens, mais les deux yeux d'une même personne diffèrent déjà. Comparez de préférence le même œil.</p>
         <p class="hint" id="irisTableIntro"></p>
         <ul class="imotifs" id="irisTable"></ul>
         <p class="hint mt10">Indice, pas une preuve : les motifs de l'iris sont en partie héréditaires, mais l'iris de chacun est unique. Une mesure « non mesurable » n'est pas notée, avec sa raison.</p>
         <div class="actions mt10"><button class="btn" type="button" id="irisCopy">Copier le texte des résultats</button><button class="btn" type="button" id="irisShare" hidden>Partager le texte</button><span class="hint">Seul le texte se partage, jamais l'image d'un iris.</span></div>
       </div>
-    </section>
-    <section class="card" id="irisSelfieCard">
-      <div class="hhead"><h3>Essai : selfie de l'iris éclairé par l'écran</h3><span class="chip warn">Expérimental</span></div>
-      <p class="hint mt6">Photographiez votre iris seul, avec la caméra avant : l'écran s'éclaire en blanc près de la caméra pour que son reflet tombe dans la pupille. Cet essai indique si votre téléphone donne un iris assez grand et net pour être mesuré. La lumière est fixe et monte progressivement, sans clignoter ; elle s'éteint dès la fermeture.</p>
-      <div class="actions mt10"><button class="btn" type="button" id="irisSelfieBtn">Essayer le selfie de l'iris</button></div>
     </section>
     <section class="notes">
       <h3 class="ink">À savoir sur l'iris</h3>
@@ -272,7 +276,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.5.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.5.1</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -407,31 +411,6 @@
   <div class="sheet-in">
     <div class="sheet-head"><h3 id="irisBaseTitle">Choisir un iris de ma base</h3><button type="button" class="btn" data-close data-autofocus>Fermer</button></div>
     <div class="ibase" id="irisBaseList"></div>
-  </div>
-</div>
-
-<div class="sheet irislight" id="irisCamSheet" hidden role="dialog" aria-modal="true" aria-labelledby="irisCamTitle">
-  <div class="sheet-in cam">
-    <div class="irislamp" id="irisLamp" aria-hidden="true"></div>
-    <div class="sheet-head"><h3 id="irisCamTitle">Selfie de l'iris (essai)</h3><button type="button" class="btn" data-close>Fermer</button></div>
-    <div id="irisCamIntro">
-      <p class="hint">La caméra avant s'ouvre et le haut de l'écran s'éclaire en blanc, progressivement et sans clignoter. Placez un œil dans le cercle, à environ 15 cm, et regardez la caméra. Si la lumière vive vous gêne, n'utilisez pas cet essai. Rien n'est enregistré ni envoyé ; la caméra et la lumière s'arrêtent dès la fermeture.</p>
-      <label class="check"><input type="checkbox" id="irisCamConsent" data-autofocus> La personne photographiée est d'accord (pour un enfant : ses parents).</label>
-      <div class="actions"><button type="button" class="btn primary" id="irisCamGo" disabled>Démarrer</button></div>
-    </div>
-    <div id="irisCamLive" hidden>
-      <div class="camview" id="irisCamView"><video id="irisCamVideo" class="mirror" playsinline muted aria-hidden="true"></video><div class="irisframe" aria-hidden="true"></div></div>
-      <p class="camtext" id="irisCamText" tabindex="-1"></p>
-      <div class="sr-only" id="irisCamSay" role="status" aria-live="polite"></div>
-      <div class="camnocam" id="irisCamNoCam" hidden><p>Caméra indisponible ou refusée. Vous pouvez importer une photo de l'iris dans l'onglet Iris.</p></div>
-      <div class="camnocam" id="irisCamPaused" hidden><p>Caméra et lumière arrêtées (application en arrière-plan ou caméra interrompue).</p><button type="button" class="btn primary" id="irisCamResume">Reprendre</button></div>
-      <div class="camctl"><button type="button" class="btn primary" id="irisCamShot" disabled>Prendre la photo (3 s)</button><button type="button" class="btn small" id="irisCamVoice" aria-pressed="true">Voix</button></div>
-      <div id="irisCamResult" hidden>
-        <canvas id="irisCamPreview" class="campreview" role="img" aria-label="Photo de l'œil"></canvas>
-        <p id="irisCamVerdict" tabindex="-1"></p>
-        <div class="actions"><button type="button" class="btn" data-use="0">Utiliser pour l'iris 1</button><button type="button" class="btn" data-use="1">Utiliser pour l'iris 2</button><button type="button" class="btn" data-use="2">Utiliser pour l'iris 3</button><button type="button" class="btn" id="irisCamRetry">Reprendre la photo</button></div>
-      </div>
-    </div>
   </div>
 </div>
 
