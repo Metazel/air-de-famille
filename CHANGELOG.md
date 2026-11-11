@@ -28,9 +28,16 @@ Corrections de l'onglet Iris après l'essai de David sur téléphone (AdF-056 à
   la correction) ; « Tout effacer » puis « Annuler » pendant l'ouverture d'une photo sans emplacement bloqué ;
   un cercle plus grand n'est retenu comme iris que si l'anneau porte des motifs (ombre d'orbite écartée) ;
   secteurs de collerette sans saut net écartés.
-- Tests : 173 contrôles e2e publics (grande photo, petit iris en pleine résolution, chemin manuel, photo pivotée
-  EXIF, iris bleu, iris foncé flou, collerette claire). Régression privée des visages : 0,000000. Banc iris privé :
-  17 côtés sur 19 mesurables identiques au prototype ; échelle de la collerette recalée sur le banc (0,15).
+- Repérage revu après le rapport de David (AdF-065, AdF-066) : le blanc de l'œil est reconnu à sa couleur et exigé
+  des deux côtés (l'œil n'est plus confondu avec une oreille, une joue, une barbe ou un sourcil) ; la lumière chaude
+  et un blanc de l'œil teinté restent acceptés en repli ; la pupille est cherchée comme un cercle dans la photo
+  d'origine, reflets ignorés, sur la clarté et la couleur (pupille noire, cœur brun), puis affinée ; une pupille
+  minuscule renvoie à la correction manuelle ; la bande de la collerette ne pèse plus sur les filaments.
+- Test e2e d'annulation de l'analyse des visages rendu stable (processeur ralenti le temps du clic, AdF-064).
+- Tests : 174 contrôles e2e publics (grande photo, petit iris en pleine résolution, chemin manuel, photo pivotée
+  EXIF, iris bleu, iris foncé flou, collerette claire, photo du visage avec barbe, oreille et sourcil). Régression privée des visages : 0,000000. Banc iris privé :
+  15 côtés sur 19 mesurables identiques au prototype (les 2 nouveaux écarts portent sur les filaments, que la collerette
+  ne fausse plus) ; échelles recalées sur le banc (collerette 0,15, filaments du cœur 0,075, du milieu 0,194).
 
 ## [v2.5.0] — 2026-11-10
 

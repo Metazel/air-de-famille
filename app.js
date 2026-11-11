@@ -4714,6 +4714,18 @@
       }
     return n ? s / n : NaN;
   }
+  function ringStat(f, w, h, cx, cy, r, a, b) {
+    const v = [];
+    let tot = 0;
+    for (let q = a; q <= b + 1e-9; q += (b - a) / 3)
+      for (let d = 0; d < 360; d += 15) {
+        tot++;
+        const t = d * Math.PI / 180, x = cx + q * r * Math.cos(t), y = cy + q * r * Math.sin(t);
+        if (x < 0 || y < 0 || x > w - 1 || y > h - 1) continue;
+        v.push(sample(f, w, h, x, y));
+      }
+    return v.length >= tot / 2 ? medianOf(v) : NaN;
+  }
   function ringSd(f, w, h, cx, cy, r, a, b) {
     let s = 0, s2 = 0, n = 0;
     for (let q = a; q <= b + 1e-9; q += (b - a) / 5)
@@ -4727,11 +4739,16 @@
       }
     return n > 8 ? Math.sqrt(Math.max(0, s2 / n - (s / n) ** 2)) : NaN;
   }
-  async function daugman(g, w, h) {
+  async function daugman(g, cn, w, h) {
     const k = 384 / Math.max(w, h), sw = Math.round(w * k), sh = Math.round(h * k);
-    const small = new Float32Array(sw * sh);
-    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) small[y * sw + x] = sample(g, w, h, (x + 0.5) / k - 0.5, (y + 0.5) / k - 0.5);
-    const sb = blur(small, sw, sh, 1.2), sd = blur(small, sw, sh, 3), mn = Math.min(sw, sh);
+    const small = new Float32Array(sw * sh), smallC = new Float32Array(sw * sh);
+    for (let y = 0; y < sh; y++)
+      for (let x = 0; x < sw; x++) {
+        const X = (x + 0.5) / k - 0.5, Y = (y + 0.5) / k - 0.5;
+        small[y * sw + x] = sample(g, w, h, X, Y);
+        smallC[y * sw + x] = sample(cn, w, h, X, Y);
+      }
+    const sb = blur(small, sw, sh, 1.2), sd = blur(small, sw, sh, 3), sl = blur(small, sw, sh, 9), cb = blur(smallC, sw, sh, 1.2), mn = Math.min(sw, sh);
     const mins = [];
     for (let y = 4; y < sh - 4; y += 2)
       for (let x = 4; x < sw - 4; x += 2) {
@@ -4741,36 +4758,48 @@
           isMin = false;
           break;
         }
-        if (isMin) mins.push([v, x, y]);
+        if (isMin) mins.push([v, x, y, v - sl[y * sw + x]]);
       }
-    mins.sort((a, b) => a[0] - b[0]);
-    const cand = [];
-    for (const m of mins) {
-      if (cand.some((c) => Math.hypot(c[1] - m[1], c[2] - m[2]) < 8)) continue;
-      cand.push(m);
-      if (cand.length >= 40) break;
-    }
-    const plausible = (c) => {
-      if (c.cx < c.r * 0.6 || c.cy < c.r * 0.6 || c.cx > sw - c.r * 0.6 || c.cy > sh - c.r * 0.6) return false;
+    const cand = [], take = (list, nmax) => {
+      let n = 0;
+      for (const m of list) {
+        if (n >= nmax) break;
+        if (cand.some((c) => Math.hypot(c[1] - m[1], c[2] - m[2]) < 8)) continue;
+        cand.push(m);
+        n++;
+      }
+    };
+    take([...mins].sort((a, b) => a[0] - b[0]), 40);
+    take([...mins].sort((a, b) => a[3] - b[3]), 30);
+    const plausible = (c) => c.pl ??= plausible0(c);
+    const plausible0 = (c) => {
+      if (c.cx < c.r * 0.6 || c.cy < c.r * 0.6 || c.cx > sw - c.r * 0.6 || c.cy > sh - c.r * 0.6) return 0;
       const out = ringLum(sb, sw, sh, c.cx, c.cy, c.r, 1.1, 1.3), inn = ringLum(sb, sw, sh, c.cx, c.cy, c.r, 0.3, 0.8);
       const side = (sgn) => {
-        let v = 0, n = 0;
-        for (let q = 1.1; q <= 1.31; q += 0.1)
+        let v = 0, ch = 0, n = 0;
+        for (let q = 1.1; q <= 1.41; q += 0.1)
           for (let d = -30; d <= 30; d += 10) {
             const t = (sgn > 0 ? d : 180 + d) * Math.PI / 180, x = c.cx + q * c.r * Math.cos(t), y = c.cy + q * c.r * Math.sin(t);
             if (x < 0 || y < 0 || x > sw - 1 || y > sh - 1) continue;
             v += sample(sb, sw, sh, x, y);
+            ch += sample(cb, sw, sh, x, y);
             n++;
           }
-        return n >= 12 ? v / n : NaN;
+        return n >= 14 ? { L: v / n, C: ch / n } : null;
       };
-      const L = side(-1), R = side(1), sides = isNaN(L) && isNaN(R) || L > inn + 8 && R > inn + 8;
-      return out > inn + 15 && sides;
+      const skin = ringStat(cb, sw, sh, c.cx, c.cy, c.r, 2.5, 3.5), cmax = isFinite(skin) ? Math.max(0.12, skin * 0.6) : 0.22;
+      const L = side(-1), R = side(1);
+      const bright = (s) => s.L > inn + 8, sclera = (s) => bright(s) && s.C < cmax;
+      const level2 = L && R ? sclera(L) && sclera(R) ? 3 : bright(L) && bright(R) ? 2 : 0 : !L && !R ? 1 : bright(L || R) ? 1 : 0;
+      return out > inn + 15 ? level2 : 0;
     };
     const outer = (c) => {
       const off = Math.max(2, c.r * 0.6);
       const big = search(sb, sw, sh, range(c.cx - off, c.cx + off, Math.max(1, off / 3)), range(c.cy - off, c.cy + off, Math.max(1, off / 3)), radii(c.r * 1.6, Math.min(mn * 0.75, c.r * 7)));
-      if (!(isFinite(big.score) && big.score > c.score * 0.4 && plausible(big))) return null;
+      const lb = isFinite(big.score) && big.score > c.score * 0.4 ? plausible(big) : 0;
+      const lc = plausible(c);
+      if (!lb || lb === 1 && lc >= 2 || lb === 2 && lc === 3) return null;
+      big.level = lb;
       const outSmall = ringLum(sb, sw, sh, c.cx, c.cy, c.r, 1.15, 1.4), outBig = ringLum(sb, sw, sh, big.cx, big.cy, big.r, 1.08, 1.25);
       const sdAnn = ringSd(small, sw, sh, big.cx, big.cy, big.r, Math.min(0.8, c.r * 1.3 / big.r), 0.85), sdOut = ringSd(small, sw, sh, big.cx, big.cy, big.r, 1.08, 1.3);
       return outSmall < outBig - 15 && sdAnn >= Math.max(4, 0.7 * sdOut) ? big : null;
@@ -4782,17 +4811,163 @@
       if (n % 8 === 7) await yieldNow();
     }
     found.sort((a, b) => b.score - a.score);
-    let c1 = { score: -Infinity };
-    for (const c of found.slice(0, 6)) {
+    const picks = [];
+    for (const c of found.slice(0, 24)) {
       if (!isFinite(c.score)) continue;
-      const big = outer(c), pick = big || (plausible(c) ? c : null);
-      if (pick && pick.score > c1.score) c1 = pick;
+      let big = outer(c);
+      for (let n = 0, b2; big && n < 2 && (b2 = outer(big)); n++) big = b2;
+      const lc = big ? 0 : plausible(c), pick = big || (lc ? Object.assign(c, { level: lc }) : null);
+      if (pick) picks.push(pick);
     }
+    const smax = Math.max(-Infinity, ...picks.map((p) => p.score));
+    let c1 = { score: -Infinity, level: 0 };
+    const rank = (p) => p.level === 3 && p.score >= smax * 0.25 ? 1 : 0;
+    for (const p of picks) if (rank(p) > rank(c1) || rank(p) === rank(c1) && p.score > c1.score) c1 = p;
     if (!isFinite(c1.score)) return { ix: NaN, iy: NaN, R0: NaN, contrast: 0 };
     await yieldNow();
     const r0 = c1.r / k, cx0 = c1.cx / k, cy0 = c1.cy / k, gb = blur(g, w, h, 1.5), st = Math.max(1, 1 / k / 2);
     const fine = search(gb, w, h, range(cx0 - 2 / k, cx0 + 2 / k, st), range(cy0 - 2 / k, cy0 + 2 / k, st), radii(Math.min(r0 * 0.92, r0 - 5), Math.max(r0 * 1.08, r0 + 5)));
     return { ix: fine.cx, iy: fine.cy, R0: fine.r, contrast: fine.score };
+  }
+  function pupilCircle(img, ix, iy, R, wl = 1, wc = 0) {
+    const { width: W, height: H, data: D } = img, s = 60 / R, S = Math.ceil(R * 1.1 * s), N = 2 * S + 1, f = new Float32Array(N * N);
+    const oob = new Uint8Array(N * N);
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const X0 = Math.round(ix + (x - S) / s), Y0 = Math.round(iy + (y - S) / s);
+        if (X0 < 0 || Y0 < 0 || X0 >= W || Y0 >= H) oob[y * N + x] = 1;
+        const X = Math.min(W - 1, Math.max(0, X0)), Y = Math.min(H - 1, Math.max(0, Y0)), o = (Y * W + X) * 4;
+        const r = D[o], g = D[o + 1], b = D[o + 2];
+        f[y * N + x] = wl * (0.299 * r + 0.587 * g + 0.114 * b) + wc * (Math.max(r, g, b) - Math.min(r, g, b));
+      }
+    const fb = blur(f, N, N, 1.2), r60 = 60;
+    const lum = new Float32Array(N * N);
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const X = Math.min(W - 1, Math.max(0, Math.round(ix + (x - S) / s))), Y = Math.min(H - 1, Math.max(0, Math.round(iy + (y - S) / s))), o = (Y * W + X) * 4;
+        lum[y * N + x] = 0.299 * D[o] + 0.587 * D[o + 1] + 0.114 * D[o + 2];
+      }
+    const lb = blur(lum, N, N, 1.2), inside = [], insideF = [];
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++)
+        if (Math.hypot(x - S, y - S) < r60 * 0.85) {
+          inside.push(lb[y * N + x]);
+          insideF.push(fb[y * N + x]);
+        }
+    const med = medianOf(inside), mad = medianOf(inside.map((v) => Math.abs(v - med))), thr = med + Math.max(35, 4 * mad);
+    const medF = medianOf(insideF), spread = Math.max(2, medianOf(insideF.map((v) => Math.abs(v - medF))));
+    const spec = new Uint8Array(N * N);
+    for (let i = 0; i < spec.length; i++) spec[i] = lb[i] > thr || oob[i] ? 1 : 0;
+    const sp = dilateDisk(spec, N, N, 2);
+    const ANG = [];
+    for (let d = 0; d < 360; d += 7.5) ANG.push([Math.cos(d * Math.PI / 180), Math.sin(d * Math.PI / 180)]);
+    const at = (x, y) => {
+      const xi = Math.round(x), yi = Math.round(y);
+      if (xi < 0 || yi < 0 || xi >= N || yi >= N || sp[yi * N + xi]) return NaN;
+      return fb[yi * N + xi];
+    };
+    const score = (cx, cy, r) => {
+      const d = [];
+      for (const [c, sn] of ANG) {
+        const a = at(cx + (r - 2) * c, cy + (r - 2) * sn), b = at(cx + (r - 1) * c, cy + (r - 1) * sn);
+        const e = at(cx + (r + 1) * c, cy + (r + 1) * sn), f2 = at(cx + (r + 2) * c, cy + (r + 2) * sn);
+        const v = (e + f2 - a - b) / 2;
+        if (isFinite(v)) d.push(v);
+      }
+      if (d.length < ANG.length * 0.5) return -Infinity;
+      d.sort((x, y) => x - y);
+      return d[Math.floor(d.length * 0.3)];
+    };
+    const zone = (c, a, b) => {
+      const v = [];
+      for (const [cs, sn] of ANG)
+        for (let q = a; q <= b + 1e-9; q += (b - a) / 3) {
+          const u = at(c.cx + q * c.r * cs, c.cy + q * c.r * sn);
+          if (isFinite(u)) v.push(u);
+        }
+      if (v.length < 8) return null;
+      const m = medianOf(v);
+      return { m, sd: medianOf(v.map((u) => Math.abs(u - m))) };
+    };
+    const r0 = Math.max(3, r60 * 0.1), r1 = r60 * 0.75, off = r60 * 0.2, prof = [];
+    for (let r = r0; r <= r1; r += 1) {
+      let b = { sc: -Infinity };
+      for (let cy = S - off; cy <= S + off; cy += 2)
+        for (let cx = S - off; cx <= S + off; cx += 2) {
+          const sc = score(cx, cy, r);
+          if (sc > b.sc) b = { sc, cx, cy, r };
+        }
+      prof.push(b);
+    }
+    const peaks = prof.filter((p, i) => isFinite(p.sc) && (i === 0 || p.sc >= prof[i - 1].sc) && (i === prof.length - 1 || p.sc >= prof[i + 1].sc)).sort((a, b) => b.sc - a.sc);
+    for (const b0 of peaks.slice(0, 4)) {
+      let best = b0;
+      for (let cy = b0.cy - 2; cy <= b0.cy + 2; cy += 0.5)
+        for (let cx = b0.cx - 2; cx <= b0.cx + 2; cx += 0.5)
+          for (let r = b0.r - 1.5; r <= b0.r + 1.5; r += 0.5) {
+            const sc = score(cx, cy, r);
+            if (sc > best.sc) best = { sc, cx, cy, r };
+          }
+      const zi = zone(best, 0.2, 0.8), zo = zone(best, 1.2, 1.6);
+      if (!(best.sc >= 4) || !zi || !zo || !(zi.m < zo.m - 6) || !(zi.sd < Math.max(4, 1.2 * zo.sd))) continue;
+      let worst = 0;
+      for (const q of [0.3, 0.5, 0.65]) {
+        const v = [];
+        for (const [cs, sn] of ANG) {
+          const u = at(best.cx + q * best.r * cs, best.cy + q * best.r * sn);
+          if (isFinite(u)) v.push(u);
+        }
+        if (v.length >= 8) {
+          const m = medianOf(v);
+          worst = Math.max(worst, medianOf(v.map((u) => Math.abs(u - m))));
+        }
+      }
+      if (!(worst < Math.max(4, 1.2 * zo.sd))) continue;
+      const out = { cx: ix + (best.cx - S) / s, cy: iy + (best.cy - S) / s, r: best.r / s, sc: best.sc, scN: best.sc / spread };
+      return refinePupil(img, out, wl, wc, thr) || out;
+    }
+    return null;
+  }
+  function refinePupil(img, p, wl, wc, thr) {
+    const { width: W, height: H, data: D } = img, s = 40 / p.r;
+    const S = Math.ceil(p.r * 1.6 * s), N = 2 * S + 1, f = new Float32Array(N * N), lum = new Float32Array(N * N), oob = new Uint8Array(N * N);
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const X0 = Math.round(p.cx + (x - S) / s), Y0 = Math.round(p.cy + (y - S) / s);
+        if (X0 < 0 || Y0 < 0 || X0 >= W || Y0 >= H) oob[y * N + x] = 1;
+        const X = Math.min(W - 1, Math.max(0, X0)), Y = Math.min(H - 1, Math.max(0, Y0)), o = (Y * W + X) * 4;
+        const r = D[o], g = D[o + 1], b = D[o + 2];
+        lum[y * N + x] = 0.299 * r + 0.587 * g + 0.114 * b;
+        f[y * N + x] = wl * lum[y * N + x] + wc * (Math.max(r, g, b) - Math.min(r, g, b));
+      }
+    const fb = blur(f, N, N, 1.2), lb = blur(lum, N, N, 1.2), spec = new Uint8Array(N * N);
+    for (let i = 0; i < spec.length; i++) spec[i] = lb[i] > thr || oob[i] ? 1 : 0;
+    const sp = dilateDisk(spec, N, N, 2);
+    const at = (x, y) => {
+      const xi = Math.round(x), yi = Math.round(y);
+      if (xi < 0 || yi < 0 || xi >= N || yi >= N || sp[yi * N + xi]) return NaN;
+      return fb[yi * N + xi];
+    };
+    const score = (cx, cy, r) => {
+      const d = [];
+      for (let k = 0; k < 64; k++) {
+        const c = Math.cos(k * Math.PI / 32), sn = Math.sin(k * Math.PI / 32);
+        const v = (at(cx + (r + 1) * c, cy + (r + 1) * sn) + at(cx + (r + 2) * c, cy + (r + 2) * sn) - at(cx + (r - 1) * c, cy + (r - 1) * sn) - at(cx + (r - 2) * c, cy + (r - 2) * sn)) / 2;
+        if (isFinite(v)) d.push(v);
+      }
+      if (d.length < 32) return -Infinity;
+      d.sort((x, y) => x - y);
+      return d[Math.floor(d.length * 0.3)];
+    };
+    let best = { sc: score(S, S, 40), cx: S, cy: S, r: 40 };
+    for (let cy = S - 3; cy <= S + 3; cy += 0.5)
+      for (let cx = S - 3; cx <= S + 3; cx += 0.5)
+        for (let r = 37; r <= 43; r += 0.5) {
+          const sc = score(cx, cy, r);
+          if (sc > best.sc) best = { sc, cx, cy, r };
+        }
+    if (!isFinite(best.sc)) return null;
+    return { ...p, cx: p.cx + (best.cx - S) / s, cy: p.cy + (best.cy - S) / s, r: best.r / s };
   }
   function ray(f, w, h, cx, cy, t, r0, r1, border = 0) {
     const n = Math.max(0, Math.floor(r1 - r0)), rs = new Float32Array(n), v = new Float32Array(n), c = Math.cos(t), s = Math.sin(t);
@@ -4866,7 +5041,12 @@
     }
     if (mode2 === "photo") {
       onStep("Recherche du bord de l'iris");
-      const d = await daugman(g, w, h);
+      const cn = new Float32Array(w * h);
+      for (let i = 0, j = 0; i < cn.length; i++, j += 4) {
+        const r = sm.data[j], gg = sm.data[j + 1], b = sm.data[j + 2], mx = Math.max(r, gg, b);
+        cn[i] = (mx - Math.min(r, gg, b)) / (mx + 40);
+      }
+      const d = await daugman(g, cn, w, h);
       if (!isFinite(d.R0) || !(d.contrast >= 2)) return null;
       ({ ix, iy, R0 } = d);
     }
@@ -4890,15 +5070,29 @@
     const clean = inpaint(sm, spec);
     await yieldNow();
     onStep("Recherche de la pupille");
-    const L = new Float32Array(w * h), C = new Float32Array(w * h);
+    let pupil = null;
+    if (mode2 === "photo") {
+      let pd = null, pdS = -Infinity;
+      for (const [wl, wc] of [[1, 0], [1, 2], [0, 3]]) {
+        const p = pupilCircle(img, ix / k, iy / k, R0 / k, wl, wc);
+        if (!p) continue;
+        const adj = p.scN * (1 - 2 * Math.hypot(p.cx - ix / k, p.cy - iy / k) / (R0 / k));
+        if (adj > pdS) {
+          pd = p;
+          pdS = adj;
+        }
+      }
+      if (pd) pupil = { name: "cercle", cx: pd.cx * k, cy: pd.cy * k, rp: pd.r * k };
+    }
+    const L = new Float32Array(pupil ? 0 : w * h), C = new Float32Array(pupil ? 0 : w * h);
     for (let i = 0, j = 0; i < L.length; i++, j += 4) {
       const [l, a, b] = lab(clean.data[j], clean.data[j + 1], clean.data[j + 2]);
       L[i] = l;
       C[i] = Math.hypot(a - 128, b - 128);
     }
     const LC = L.map((v, i) => v + 3 * C[i]);
-    let best = null;
-    for (const [name, ch] of [["clarté", L], ["clarté+couleur", LC], ["couleur", C]]) {
+    let best = pupil;
+    if (!best) for (const [name, ch] of [["clarté", L], ["clarté+couleur", LC], ["couleur", C]]) {
       const chb = blur(ch, w, h, 2);
       let cx = ix, cy = iy, rp2 = 0, nk = 0, pts = [], con = [];
       for (let pass = 0; pass < 2; pass++) {
@@ -4935,7 +5129,7 @@
       }
       await yieldNow();
     }
-    if (!best || !(best.rp > 2) || best.rp > R0 * 0.85) return null;
+    if (!best || !(best.rp > 2) || best.rp > R0 * 0.85 || best.rp < R0 * 0.12) return null;
     const { cx: px, cy: py, rp } = best;
     onStep("Suivi du bord de l'iris");
     const ro = new Float32Array(NA).fill(NaN), seenMask = new Uint8Array(NA).fill(1);
@@ -5225,38 +5419,6 @@
     }
     const sharpness = rat.length ? medianOf(rat) : 0;
     const texSNR = texG / Math.max(noiseSd, 0.5), plain = texRel < TEXTURE_REL_MIN || sharpness < SHARPNESS_MIN;
-    const share = (x0, x1) => {
-      let a = 0, b = 0, n = 0;
-      for (let y = 0; y < nA; y++)
-        for (let x = x0; x < x1; x++) {
-          const i = y * nR + x;
-          if (!ok[i]) continue;
-          a += sy[i] * sy[i];
-          b += sx[i] * sx[i];
-          n++;
-        }
-      return n && a + b > 0 ? a / (a + b) : NaN;
-    };
-    const third = Math.round(nR / 3), two = Math.round(2 * nR / 3);
-    const F = {}, why = {};
-    const put = (key, val, cov, reason, motif = true) => {
-      if (motif && plain) {
-        F[key] = null;
-        why[key] = "iris flou ou sans motif visible";
-      } else if (cov < 0.5 || !isFinite(val)) {
-        F[key] = null;
-        why[key] = reason;
-      } else F[key] = val;
-    };
-    put("filaments_coeur", share(0, third), cover(0, third), "cœur de l'iris peu visible");
-    put("filaments_milieu", share(third, two), cover(third, two), "milieu de l'iris peu visible");
-    put("sillons_bord", 1 - share(two, nR), cover(two, nR), "pourtour peu visible");
-    await yieldNow2();
-    if (stop2()) throw new Error("annulé");
-    const b1 = blur(gry, nR, nA, 1.5), b5 = blur(gry, nR, nA, 5), cm = new Uint8Array(nR * nA);
-    for (let i = 0; i < cm.length; i++) cm[i] = b1[i] - b5[i] < -12 && ok[i] ? 1 : 0;
-    const all = cover(0, nR);
-    put("cryptes_densite", countBlobs(cm, nR, nA, 6) / 7.2, all, "iris peu visible");
     const prof = new Float32Array(nR);
     let pm = 0, pn = 0;
     for (let x = 0; x < nR; x++) {
@@ -5289,7 +5451,40 @@
       const a = grad[collar - 1], b = grad[collar], c = grad[collar + 1], den = a - 2 * b + c;
       if (den < 0) off = Math.max(-0.5, Math.min(0.5, 0.5 * (a - c) / den));
     }
-    put("collerette", sharp ? collarSectors(gry, ok, nR, nA, x0c, x1c) ?? (collar + off) / nR : NaN, all, "collerette peu nette");
+    const collSect = collarSectors(gry, ok, nR, nA, x0c, x1c), collPos = collSect ?? (collar + off) / nR, collX = Math.round(collPos * nR);
+    const share = (x0, x1, exclColl = true) => {
+      let a = 0, b = 0, n = 0;
+      for (let y = 0; y < nA; y++)
+        for (let x = x0; x < x1; x++) {
+          const i = y * nR + x;
+          if (!ok[i] || exclColl && Math.abs(x - collX) <= 4) continue;
+          a += sy[i] * sy[i];
+          b += sx[i] * sx[i];
+          n++;
+        }
+      return n && a + b > 0 ? a / (a + b) : NaN;
+    };
+    const third = Math.round(nR / 3), two = Math.round(2 * nR / 3);
+    const F = {}, why = {};
+    const put = (key, val, cov, reason, motif = true) => {
+      if (motif && plain) {
+        F[key] = null;
+        why[key] = "iris flou ou sans motif visible";
+      } else if (cov < 0.5 || !isFinite(val)) {
+        F[key] = null;
+        why[key] = reason;
+      } else F[key] = val;
+    };
+    put("filaments_coeur", share(0, third), cover(0, third), "cœur de l'iris peu visible");
+    put("filaments_milieu", share(third, two), cover(third, two), "milieu de l'iris peu visible");
+    put("sillons_bord", 1 - share(two, nR, false), cover(two, nR), "pourtour peu visible");
+    await yieldNow2();
+    if (stop2()) throw new Error("annulé");
+    const b1 = blur(gry, nR, nA, 1.5), b5 = blur(gry, nR, nA, 5), cm = new Uint8Array(nR * nA);
+    for (let i = 0; i < cm.length; i++) cm[i] = b1[i] - b5[i] < -12 && ok[i] ? 1 : 0;
+    const all = cover(0, nR);
+    put("cryptes_densite", countBlobs(cm, nR, nA, 6) / 7.2, all, "iris peu visible");
+    put("collerette", sharp ? collPos : NaN, all, "collerette peu nette");
     const Lin = [], Lout = [];
     for (let y = 0; y < nA; y++)
       for (let x = 3; x < nR - 3; x++) {
@@ -5408,8 +5603,8 @@
   // src/js/engine/iris/cotes.js
   var EGALITE = 0.1;
   var MOTIFS = [
-    { key: "filaments_coeur", label: "Filaments du cœur", scale: 0.073, what: "les fines lignes qui partent de la pupille, dans le tiers intérieur de l'iris" },
-    { key: "filaments_milieu", label: "Filaments du milieu", scale: 0.185, what: "les lignes rayonnantes du tiers central" },
+    { key: "filaments_coeur", label: "Filaments du cœur", scale: 0.075, what: "les fines lignes qui partent de la pupille, dans le tiers intérieur de l'iris" },
+    { key: "filaments_milieu", label: "Filaments du milieu", scale: 0.194, what: "les lignes rayonnantes du tiers central" },
     { key: "sillons_bord", label: "Sillons du pourtour", scale: 0.29, what: "les plis en cercle qui font le tour de l'iris, dans le tiers extérieur" },
     { key: "spirales_bord", label: "Spirales du pourtour", scale: 0.36, what: "les motifs obliques du tiers extérieur, ni rayons ni cercles" },
     { key: "cryptes_densite", label: "Cryptes", scale: 21, what: "les petits creux sombres en forme de losange, surtout près de la collerette" },

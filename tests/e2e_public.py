@@ -224,9 +224,13 @@ with sync_playwright() as p:
     # Progression de l'analyse (CU6) et annulation
     prog = page.evaluate("window.__prog")
     check("Analyse : progression par étapes nommées", any("Étape" in t for t in prog), prog[:4])
+    # Processeur ralenti ×8 le temps de cliquer : sans cela, une machine rapide finit l'analyse avant le clic (AdF-064).
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": 8})
     page.set_input_files("#file0", os.path.join(FIX, "geante.jpg"))
-    page.wait_for_selector(".slot[data-i='0'] .prog:not([hidden]) .pcancel", timeout=5000)
-    page.click(".slot[data-i='0'] .pcancel")
+    # Bouton visible seulement (d'autres emplacements « 0 » existent dans les onglets masqués).
+    page.locator("#slots .slot[data-i='0'] .prog:not([hidden]) .pcancel").first.click(timeout=15000)
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": 1})
     page.wait_for_timeout(400)
     st = page.evaluate("[AirDeFamille.slots[0].status, !!document.querySelector('.slot[data-i=\"0\"] .prog:not([hidden])')]")
     check("Analyse : annulation possible, la photo est retirée", st == ["empty", False], st)
@@ -666,10 +670,17 @@ with sync_playwright() as p:
         pi.set_input_files(f".islot[data-i='{i}'] input[type=file]", f)
         attendre(pi, f"(() => {{ const s = AirDeFamille.iris.state().slots[{i}]; return s.gen > {g0} && ({final}); }})()", delai)
     PA = {"fond": "oeil", "collerette": 0.36, "contraste": -20, "coeur": 14, "coeurAmp": 34, "sillons": 6, "sillonsAmp": 20, "cryptes": 2, "graine": 3}
-    PB = {"fond": "blanc", "collerette": 0.36, "contraste": 12, "coeur": 44, "coeurAmp": 12, "spirales": 36, "spiralesAmp": 26, "cryptes": 24, "graine": 5}
+    # Cœur de Marc presque sans filaments (amplitude 3) : la mesure (part des filaments rayonnants) compare une
+    # orientation, pas un nombre de filaments ; avant AdF-067, l'écart venait du saut de la collerette, pas du cœur.
+    PB = {"fond": "blanc", "collerette": 0.36, "contraste": 12, "coeur": 44, "coeurAmp": 3, "spirales": 36, "spiralesAmp": 26, "cryptes": 24, "graine": 5}
     PC = {"fond": "oeil", "collerette": 0.36, "contraste": 12, "coeur": 14, "coeurAmp": 34, "spirales": 36, "spiralesAmp": 26, "cryptes": 24, "graine": 9}
     fA, fB, fC = iris_png("iris_a.png", PA), iris_png("iris_b.png", PB), iris_png("iris_c.png", PC)
     fBruit = iris_png("iris_bruit.png", {"fond": "oeil", "coeurAmp": 0, "milieuAmp": 0, "sillonsAmp": 0, "spiralesAmp": 0, "cryptes": 0, "contraste": 0, "bruit": 4})
+    # Photo du visage (3 000 × 2 400) : petit œil, barbe très sombre, oreille rouge, sourcil (AdF-065).
+    fVisage = iris_png("iris_visage.png", {"w": 3000, "h": 2400, "cx": 1800, "cy": 700, "ri": 110, "rp": 40, "fond": "oeil", "couleur": [70, 45, 30],
+                       "coeur": 30, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14,
+                       "taches": [{"x": 500, "y": 1700, "rx": 450, "ry": 600, "c": [8, 8, 8]}, {"x": 120, "y": 1100, "rx": 110, "ry": 260, "c": [200, 95, 85]},
+                                  {"x": 1800, "y": 470, "rx": 330, "ry": 45, "c": [50, 40, 35]}]})
     fPetitGrand = iris_png("iris_petit_grand.png", {"w": 5000, "h": 3000, "cx": 2500, "cy": 1500, "ri": 100, "rp": 28, "fond": "oeil", "coeur": 30})
     fBleu = iris_png("iris_bleu.png", {"w": 1800, "h": 1200, "cx": 900, "cy": 600, "ri": 260, "rp": 70, "fond": "oeil", "couleur": [150, 170, 190], "coeur": 30, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14})
     fFonceFlou = iris_png("iris_fonce_flou.png", {"fond": "oeil", "couleur": [45, 30, 20], "coeur": 30, "coeurAmp": 26, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14, "flou": 10})
@@ -715,10 +726,13 @@ with sync_playwright() as p:
     pi.click("#irisGo")
     attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
     txt = pi.evaluate("AirDeFamille.iris.state().text")
-    attendu = ["Filaments du cœur : Plus proche de : Anna", "Filaments du milieu : Plus proche de : Anna", "Sillons du pourtour : Plus proche de : Marc",
+    # Milieu : par construction, les trois iris ont le même dessin de milieu (seules les cryptes diffèrent) ; le verdict
+    # bascule d'un côté à l'autre pour un pixel de pupille (AdF-046) : non contrôlé, comme les cryptes. Avant AdF-065,
+    # le saut de clarté de la collerette, compté à tort comme motif, le faisait pencher vers Anna.
+    attendu = ["Filaments du cœur : Plus proche de : Anna", "Sillons du pourtour : Plus proche de : Marc",
                "Spirales du pourtour : Plus proche de : Marc", "Position de la collerette : Égalité entre Anna et Marc", "Contraste cœur / pourtour : Plus proche de : Marc"]
     # Cryptes : mesure encore peu sensible (AdF-046), non contrôlée ici ; présente et sans total.
-    check("Iris (I4) : 6 motifs sur 7 penchent du côté attendu (trio construit), cryptes affichées, sans total", all(a in txt for a in attendu) and "Cryptes : " in txt and "%" not in txt and "score" not in txt.lower(), txt)
+    check("Iris (I4) : 5 motifs sur 7 penchent du côté attendu (trio construit ; milieu et cryptes non contrôlés), cryptes affichées, sans total", all(a in txt for a in attendu) and "Cryptes : " in txt and "%" not in txt and "score" not in txt.lower(), txt)
     check("Iris (I4) : mention « indice, pas une preuve »", "Indice, pas une preuve" in pi.inner_text("#irisResults"))
     check("Iris (I3) : trois bandes déroulées, décrites en texte pour TalkBack", pi.locator("#irisBands canvas").count() == 3 and all(len(pi.locator("#irisBands canvas").nth(k).get_attribute("aria-label") or "") > 120 for k in range(3)))
     ctx.remove_listener("request", ecoute)
@@ -813,6 +827,10 @@ with sync_playwright() as p:
     importer(1, fGrand)
     lg = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
     check("Iris (AdF-058) : grande photo → iris repéré puis découpé à pleine résolution (rayon 300 px, pas 180)", lg and abs(lg["ri"] - 300) / 300 < 0.04 and abs(lg["rp"] - 85) / 85 < 0.06, lg)
+    importer(1, fVisage)
+    sv = pi.evaluate("AirDeFamille.iris.state().slots[1]")
+    check("Iris (AdF-065) : photo du visage → l'œil est trouvé (pas la barbe, l'oreille ni le sourcil), pupille comprise",
+          sv["status"] == "ready" and sv["lm"] and abs(sv["lm"]["ri"] - 110) / 110 < 0.08 and abs(sv["lm"]["rp"] - 40) / 40 < 0.15, sv)
     # Grande photo (5 000 × 3 000) avec un petit iris (200 px) : jugé à pleine résolution, accepté et signalé (AdF-062).
     importer(1, fPetitGrand)
     sp = pi.evaluate("AirDeFamille.iris.state().slots[1]")
