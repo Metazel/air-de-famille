@@ -5701,6 +5701,30 @@
   }
   var packLandmarks = (lm) => ({ cx: +lm.cx.toFixed(2), cy: +lm.cy.toFixed(2), rp: +lm.rp.toFixed(2), ro: Array.from(lm.ro, (v) => +v.toFixed(2)), auto: !!lm.auto });
   var unpackLandmarks = (o) => o && Array.isArray(o.ro) && o.ro.length === NA ? { cx: +o.cx, cy: +o.cy, rp: +o.rp, ro: Float32Array.from(o.ro, Number), auto: !!o.auto } : null;
+  function photoQuality(img, lm) {
+    const nA = 360, nR = 64, sh = unwrap(img, lm, { nA, nR }), g = gray(sh), ok = new Uint8Array(nA * nR);
+    let refl2 = 0;
+    for (let i = 0; i < ok.length; i++) {
+      ok[i] = g[i] < 230 && g[i] > 8 ? 1 : 0;
+      if (g[i] >= 230) refl2++;
+    }
+    const f1 = blur(g, nR, nA, 1), f3 = blur(g, nR, nA, 3), f9 = blur(g, nR, nA, 9), rat = [];
+    const x0 = Math.round(nR * 0.15), x1 = Math.round(nR * 0.85);
+    for (let k = 0; k < 16; k++) {
+      const y0 = Math.floor(k * nA / 16), y1 = Math.floor((k + 1) * nA / 16);
+      let eF = 0, eC = 0, n = 0;
+      for (let y = y0; y < y1; y++)
+        for (let x = x0; x < x1; x++) {
+          const i = y * nR + x;
+          if (!ok[i]) continue;
+          eF += (f1[i] - f3[i]) ** 2;
+          eC += (f3[i] - f9[i]) ** 2;
+          n++;
+        }
+      if (n >= (y1 - y0) * (x1 - x0) * 0.3 && eC > 0) rat.push(Math.sqrt(eF / eC));
+    }
+    return { sharp: rat.length ? medianOf(rat) : 0, reflets: refl2 / ok.length };
+  }
 
   // src/js/ui/iris.js
   var MAX_SIDE = 2400;
@@ -5743,6 +5767,7 @@
     </fieldset>
     <div class="iact">
       <button type="button" class="btn small" data-act="pick" aria-label="Importer une photo, iris ${n}">Importer une photo</button>
+      <button type="button" class="btn small" data-act="burst" aria-label="Plusieurs photos (rafale), iris ${n}">Plusieurs photos (rafale)</button>
       <button type="button" class="btn small" data-act="fix" aria-label="Corriger les repères, iris ${n}" hidden>Corriger les repères</button>
       <button type="button" class="btn small" data-act="frombase" aria-label="Depuis ma base, iris ${n}" hidden>Depuis ma base</button>
       <button type="button" class="btn small" data-act="keep" aria-label="Garder dans ma base, iris ${n}" hidden>Garder dans ma base</button>
@@ -5750,6 +5775,7 @@
     </div>
     <p class="hint istate"></p>
     <input type="file" accept="image/*" hidden data-f="file">
+    <input type="file" accept="image/*" multiple hidden data-f="burst">
   </div>`;
   }
   var el2 = (s) => $(`.islot[data-i="${s.i}"]`);
@@ -5817,6 +5843,7 @@
     for (const r of $$(`input[name=ieye${s.i}]`, e)) r.checked = r.value === s.eye;
     e.dataset.status = s.status;
     $("[data-act=pick]", e).disabled = !agreed() || s.status === "busy";
+    $("[data-act=burst]", e).disabled = !agreed() || s.status === "busy";
     $("[data-act=fix]", e).hidden = !has || s.status === "busy";
     $("[data-act=fix]", e).classList.toggle("primary", s.status === "tofix");
     $("[data-act=clear]", e).hidden = !has;
@@ -6012,6 +6039,12 @@
     renderSlot2(s);
   }
   function clearIris() {
+    stopBurst();
+    if (fix.s) {
+      fix.s = null;
+      if (!$("#irisFixSheet").hidden) closeDialog();
+    }
+    if (!$("#irisBurstSheet").hidden) closeDialog();
     islots.forEach(clearSlot2);
   }
   var irisHasContent = () => islots.some((s) => s.src);
@@ -6027,18 +6060,41 @@
     });
     islots.forEach(renderSlot2);
   }
-  var fix = { s: null, lm: null, sel: "c", half: 0, ox: 0, oy: 0, k: 1, drag: null };
+  var fix = { s: null, lm: null, cont: null, sel: "c", half: 0, ox: 0, oy: 0, k: 1, drag: null, pan: null, ptrs: /* @__PURE__ */ new Map(), pinch: null };
   var copyLm = (lm) => ({ cx: lm.cx, cy: lm.cy, rp: lm.rp, ro: Float32Array.from(lm.ro), auto: lm.auto });
+  function initContour() {
+    const lm = fix.lm, pts = [];
+    for (let a = 0; a < NA; a++) {
+      const t = a / NA * 2 * Math.PI;
+      pts.push([lm.cx + lm.ro[a] * Math.cos(t), lm.cy + lm.ro[a] * Math.sin(t)]);
+    }
+    fix.cont = pts;
+  }
+  function irisCircle() {
+    const c = fitCircle(fix.cont, 3, 3);
+    return isFinite(c.r) && c.r > 0 ? c : { cx: fix.lm.cx, cy: fix.lm.cy, r: edgeAt(fix.lm.ro, Math.PI) || 1 };
+  }
+  function syncRo() {
+    const lm = fix.lm, P = fix.cont, n = P.length;
+    for (let a = 0; a < NA; a++) {
+      const t = a / NA * 2 * Math.PI, dx = Math.cos(t), dy = Math.sin(t);
+      let best = Infinity;
+      for (let j = 0; j < n; j++) {
+        const [x1, y1] = P[j], [x2, y2] = P[(j + 1) % n], ex = x2 - x1, ey = y2 - y1, den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-9) continue;
+        const qx = x1 - lm.cx, qy = y1 - lm.cy, r = (qx * ey - qy * ex) / den, u = (qx * dy - qy * dx) / den;
+        if (r > 0 && u >= 0 && u <= 1 && r < best) best = r;
+      }
+      lm.ro[a] = isFinite(best) ? best : NaN;
+    }
+  }
   function openFix(s) {
     if (!s.src) return;
     fix.s = s;
     fix.lm = copyLm(s.lm || s.lmSmall || defaultLandmarks(s.img));
+    initContour();
     fix.errAt = 0;
-    let rmax = 0;
-    for (const v of fix.lm.ro) rmax = Math.max(rmax, v);
-    fix.half = Math.max(rmax * 1.45, 40);
-    fix.ox = fix.lm.cx - fix.half;
-    fix.oy = fix.lm.cy - fix.half;
+    focusIris();
     $("#irisFixWho").textContent = ` : ${nameOf(s)}`;
     $("#irisFixAuto").hidden = !!s.baseRef && !s.lmAuto;
     selectHandle("c");
@@ -6047,31 +6103,79 @@
     });
     drawFix();
   }
+  function focusIris() {
+    const c = irisCircle();
+    fix.half = Math.max(c.r * 1.45, 40);
+    fix.ox = c.cx - fix.half;
+    fix.oy = c.cy - fix.half;
+  }
+  function fitAll() {
+    const { width: W, height: H } = fix.s.img;
+    fix.half = Math.max(W, H) / 2 * 1.02;
+    fix.ox = W / 2 - fix.half;
+    fix.oy = H / 2 - fix.half;
+  }
+  function zoomAt(f, px, py) {
+    const { width: W, height: H } = fix.s.img, nh = Math.max(12, Math.min(Math.max(W, H) * 0.6, fix.half / f)), q = nh / fix.half;
+    fix.ox = px - (px - fix.ox) * q;
+    fix.oy = py - (py - fix.oy) * q;
+    fix.half = nh;
+    drawFix();
+  }
+  var viewCenter = () => [fix.ox + fix.half, fix.oy + fix.half];
   function selectHandle(h) {
     fix.sel = h;
     for (const b of $$("#irisFixSel button")) b.setAttribute("aria-pressed", String(b.dataset.sel === h));
-    $("#irisPadMove").hidden = h !== "c";
-    $("#irisPadSize").hidden = h === "c";
+    $("#irisPadMove").hidden = h !== "c" && h !== "ic";
+    $("#irisPadSize").hidden = h === "c" || h === "ic";
   }
-  var handlePos = (h, lm) => h === "c" ? [lm.cx, lm.cy] : h === "p" ? [lm.cx + lm.rp, lm.cy] : [lm.cx - edgeAt(lm.ro, Math.PI), lm.cy];
+  function handlePos(h) {
+    const lm = fix.lm;
+    if (h === "c") return [lm.cx, lm.cy];
+    if (h === "p") return [lm.cx + lm.rp, lm.cy];
+    const c = irisCircle();
+    return h === "ic" ? [c.cx, c.cy] : [c.cx - c.r, c.cy];
+  }
   function drawFix() {
     const cv = $("#irisFixCanvas"), W = cv.width, g = cv.getContext("2d"), lm = fix.lm;
     fix.k = W / (2 * fix.half);
     g.fillStyle = "#808080";
     g.fillRect(0, 0, W, W);
     g.drawImage(fix.s.src, fix.ox, fix.oy, 2 * fix.half, 2 * fix.half, 0, 0, W, W);
-    drawMarks(g, lm, (x) => (x - fix.ox) * fix.k, (y) => (y - fix.oy) * fix.k, fix.k);
+    const X = (x) => (x - fix.ox) * fix.k, Y = (y) => (y - fix.oy) * fix.k;
+    for (const [w, col] of [[4, "rgba(0,0,0,.75)"], [2, "#fff"]]) {
+      g.lineWidth = w;
+      g.strokeStyle = col;
+      g.setLineDash([]);
+      g.beginPath();
+      fix.cont.forEach(([x, y], j) => j ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)));
+      g.closePath();
+      g.stroke();
+      g.setLineDash(w === 2 ? [6, 4] : []);
+      g.beginPath();
+      g.arc(X(lm.cx), Y(lm.cy), lm.rp * fix.k, 0, 2 * Math.PI);
+      g.stroke();
+    }
+    g.setLineDash([]);
     for (const b of $$("#irisFixWrap .hdl")) {
-      const [x, y] = handlePos(b.dataset.h, lm);
-      b.style.left = `${(x - fix.ox) * fix.k / W * 100}%`;
-      b.style.top = `${(y - fix.oy) * fix.k / W * 100}%`;
+      const [x, y] = handlePos(b.dataset.h), sx = X(x) / W, sy = Y(y) / W, inView = sx >= 0 && sx <= 1 && sy >= 0 && sy <= 1;
+      const keep = b.dataset.h === fix.sel || document.activeElement === b, cl = (v) => Math.max(0, Math.min(1, v));
+      b.hidden = !inView && !keep;
+      b.style.left = `${(inView ? sx : cl(sx)) * 100}%`;
+      b.style.top = `${(inView ? sy : cl(sy)) * 100}%`;
       b.setAttribute("aria-pressed", String(b.dataset.h === fix.sel));
     }
+    $("#irisZoomVal").textContent = `${Math.round(fix.k * 100)} %`;
     paintBand();
     announce();
   }
   var paintBand = debounce(() => {
     if (!fix.s) return;
+    if (!validLandmarks(fix.lm, fix.s.img.width, fix.s.img.height)) {
+      const cv2 = $("#irisFixBand");
+      cv2.getContext("2d").clearRect(0, 0, cv2.width, cv2.height);
+      return;
+    }
     const b = previewBand(fix.s.img, fix.lm, { mirror: fix.s.eye === "G" }), cv = $("#irisFixBand");
     cv.width = b.width;
     cv.height = b.height;
@@ -6079,8 +6183,8 @@
   }, 80);
   var announce = debounce(() => {
     if (!fix.s || performance.now() - (fix.errAt || 0) < 1500) return;
-    const ri = edgeAt(fix.lm.ro, Math.PI) || 1;
-    $("#irisFixVals").textContent = `Centre : ${Math.round(fix.lm.cx)}, ${Math.round(fix.lm.cy)}. Pupille : ${Math.round(2 * fix.lm.rp)} px de diamètre (${Math.round(fix.lm.rp / ri * 100)} % de l'iris). Iris : ${Math.round(2 * ri)} px de diamètre.`;
+    const c = irisCircle(), lm = fix.lm, off = Math.hypot(lm.cx - c.cx, lm.cy - c.cy);
+    $("#irisFixVals").textContent = `Pupille : ${Math.round(2 * lm.rp)} px de diamètre (${Math.round(lm.rp / c.r * 100)} % de l'iris). Iris : ${Math.round(2 * c.r)} px de diamètre. Écart entre les deux centres : ${Math.round(off)} px.`;
   }, 300);
   function applyMove(h, x, y) {
     const lm = fix.lm;
@@ -6089,21 +6193,26 @@
       lm.cy = y;
     } else if (h === "p") {
       let minR = Infinity;
-      for (const v of lm.ro) minR = Math.min(minR, v);
+      for (const v of lm.ro) if (isFinite(v)) minR = Math.min(minR, v);
       lm.rp = Math.max(2, Math.min(minR / 1.2 - 1, Math.hypot(x - lm.cx, y - lm.cy)));
+    } else if (h === "ic") {
+      const c = irisCircle(), dx = x - c.cx, dy = y - c.cy;
+      for (const p of fix.cont) p[0] += dx, p[1] += dy;
     } else {
-      const cur = edgeAt(lm.ro, Math.PI) || 1, want = Math.max(lm.rp * 1.25, Math.hypot(x - lm.cx, y - lm.cy)), f = want / cur;
-      for (let a = 0; a < NA; a++) lm.ro[a] *= f;
+      const c = irisCircle(), f = Math.max(lm.rp * 1.25, Math.hypot(x - c.cx, y - c.cy)) / c.r;
+      for (const p of fix.cont) p[0] = c.cx + (p[0] - c.cx) * f, p[1] = c.cy + (p[1] - c.cy) * f;
     }
+    if (h !== "p") syncRo();
     lm.auto = false;
     drawFix();
   }
   function nudge(h, dx, dy, big, size = null) {
-    const step2 = Math.max(1, edgeAt(fix.lm.ro, Math.PI) / 120) * (big === true ? 10 : big === "btn" ? 4 : 1), lm = fix.lm;
-    if (h === "c") return applyMove("c", lm.cx + dx * step2, lm.cy + dy * step2);
-    const grow = size ?? (dy < 0 ? 1 : dy > 0 ? -1 : h === "p" ? Math.sign(dx) : -Math.sign(dx)), [x, y] = handlePos(h, lm);
-    const r = Math.hypot(x - lm.cx, y - lm.cy) + grow * step2;
-    applyMove(h, lm.cx + (h === "p" ? r : -r), lm.cy);
+    const step2 = Math.max(0.25, 2 / fix.k) * (big === true ? 10 : big === "btn" ? 4 : 1), [x, y] = handlePos(h);
+    if (h === "c" || h === "ic") return applyMove(h, x + dx * step2, y + dy * step2);
+    const grow = size ?? (dy < 0 ? 1 : dy > 0 ? -1 : h === "p" ? Math.sign(dx) : -Math.sign(dx));
+    if (h === "p") return applyMove("p", fix.lm.cx + fix.lm.rp + grow * step2, fix.lm.cy);
+    const c = irisCircle();
+    applyMove("i", c.cx - (c.r + grow * step2), c.cy);
   }
   function pointerToImage(e) {
     const r = $("#irisFixCanvas").getBoundingClientRect(), W = $("#irisFixCanvas").width;
@@ -6113,22 +6222,76 @@
     const wrap = $("#irisFixWrap");
     wrap.addEventListener("pointerdown", (e) => {
       const b = e.target.closest(".hdl");
-      if (!b) return;
-      e.preventDefault();
-      selectHandle(b.dataset.h);
-      fix.drag = b.dataset.h;
-      b.setPointerCapture?.(e.pointerId);
-      b.focus();
+      if (b) {
+        e.preventDefault();
+        selectHandle(b.dataset.h);
+        fix.drag = b.dataset.h;
+        fix.dragId = e.pointerId;
+        b.setPointerCapture?.(e.pointerId);
+        b.focus();
+        return;
+      }
+      fix.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      wrap.setPointerCapture?.(e.pointerId);
+      if (fix.ptrs.size === 1) fix.pan = { x: e.clientX, y: e.clientY, ox: fix.ox, oy: fix.oy };
+      else if (fix.ptrs.size === 2) {
+        const [p1, p2] = [...fix.ptrs.values()];
+        fix.pan = null;
+        fix.pinch = { d: Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) || 1 };
+      }
     });
     wrap.addEventListener("pointermove", (e) => {
-      if (!fix.drag) return;
-      const [x, y] = pointerToImage(e);
-      applyMove(fix.drag, x, y);
+      if (fix.drag) {
+        if (e.pointerId !== fix.dragId) return;
+        fix.next = pointerToImage(e);
+        if (!fix.raf)
+          fix.raf = requestAnimationFrame(() => {
+            fix.raf = 0;
+            if (fix.drag && fix.next) applyMove(fix.drag, ...fix.next);
+          });
+        return;
+      }
+      if (!fix.ptrs.has(e.pointerId)) return;
+      fix.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      const r = $("#irisFixCanvas").getBoundingClientRect(), sc = $("#irisFixCanvas").width / r.width / fix.k;
+      if (fix.pinch && fix.ptrs.size === 2) {
+        const [p1, p2] = [...fix.ptrs.values()], d = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) || 1;
+        const [mx, my] = pointerToImage({ clientX: (p1[0] + p2[0]) / 2, clientY: (p1[1] + p2[1]) / 2 });
+        zoomAt(d / fix.pinch.d, mx, my);
+        fix.pinch.d = d;
+      } else if (fix.pan) {
+        fix.ox = fix.pan.ox - (e.clientX - fix.pan.x) * sc;
+        fix.oy = fix.pan.oy - (e.clientY - fix.pan.y) * sc;
+        drawFix();
+      }
     });
-    const end = () => fix.drag = null;
+    const end = (e) => {
+      if (e.pointerId === fix.dragId) fix.drag = fix.dragId = null;
+      fix.ptrs.delete(e.pointerId);
+      if (fix.ptrs.size < 2) fix.pinch = null;
+      if (fix.ptrs.size === 1) {
+        const [p] = [...fix.ptrs.values()];
+        fix.pan = { x: p[0], y: p[1], ox: fix.ox, oy: fix.oy };
+      } else if (!fix.ptrs.size) fix.pan = null;
+    };
     wrap.addEventListener("pointerup", end);
     wrap.addEventListener("pointercancel", end);
+    wrap.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const [x, y] = pointerToImage(e);
+        zoomAt(Math.exp(-e.deltaY * 15e-4), x, y);
+      },
+      { passive: false }
+    );
     wrap.addEventListener("keydown", (e) => {
+      if (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "0") {
+        e.preventDefault();
+        if (e.key === "0") return fitAll(), drawFix();
+        const [cx, cy] = viewCenter();
+        return zoomAt(e.key === "-" ? 1 / 1.5 : 1.5, cx, cy);
+      }
       const b = e.target.closest(".hdl"), d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (!b || !d) return;
       e.preventDefault();
@@ -6145,15 +6308,31 @@
       selectHandle(b.dataset.sel);
       drawFix();
     });
+    $("#irisZoom").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-zoom]");
+      if (!b || !fix.s) return;
+      const z = b.dataset.zoom, [cx, cy] = viewCenter();
+      if (z === "in") zoomAt(1.5, cx, cy);
+      else if (z === "out") zoomAt(1 / 1.5, cx, cy);
+      else {
+        z === "all" ? fitAll() : focusIris();
+        drawFix();
+      }
+    });
     for (const b of $$("#irisFixSheet [data-nudge]"))
       b.addEventListener("click", () => {
         const [dx, dy] = b.dataset.nudge.split(",").map(Number);
-        nudge("c", dx, dy, "btn");
+        nudge(fix.sel === "ic" ? "ic" : "c", dx, dy, "btn");
       });
     for (const b of $$("#irisFixSheet [data-size]")) b.addEventListener("click", () => nudge(fix.sel, 0, 0, "btn", Number(b.dataset.size)));
     $("#irisFixOk").addEventListener("click", async () => {
       const s = fix.s;
       if (!s) return;
+      if (fix.lm.ro.some((v) => !isFinite(v))) {
+        fix.errAt = performance.now();
+        $("#irisFixVals").textContent = "Le centre de la pupille est hors de l'iris : rapprochez Cp et Ci.";
+        return;
+      }
       if (!validLandmarks(fix.lm, s.img.width, s.img.height)) {
         fix.errAt = performance.now();
         $("#irisFixVals").textContent = "Repères incohérents : le bord de l'iris doit entourer la pupille d'au moins 20 %. Agrandissez le bord ou réduisez la pupille.";
@@ -6227,6 +6406,7 @@
         s.lmAuto = lm;
       }
       fix.lm = copyLm(s.lmAuto);
+      initContour();
       drawFix();
       $("#irisFixOk").focus();
     });
@@ -6450,6 +6630,7 @@
       if (!b) return;
       const s = islots[Number(b.closest(".islot").dataset.i)], act = b.dataset.act;
       if (act === "pick") $("[data-f=file]", el2(s)).click();
+      else if (act === "burst") $("[data-f=burst]", el2(s)).click();
       else if (act === "fix") openFix(s);
       else if (act === "clear") {
         clearSlot2(s);
@@ -6463,6 +6644,10 @@
         const f = e.target.files?.[0];
         e.target.value = "";
         loadFile(s, f);
+      } else if (e.target.dataset.f === "burst") {
+        const fs = [...e.target.files || []];
+        e.target.value = "";
+        runBurst(s, fs);
       } else if (e.target.type === "radio") {
         s.eye = e.target.value;
         invalidate();
@@ -6512,9 +6697,131 @@
       if (!$("#irisKeepSheet").hidden && !base.on) closeDialog();
     });
     initFix();
+    initBurst();
     islots.forEach(renderSlot2);
   }
+  var MAX_BURST = 20;
+  var burst = { s: null, gen: 0, status: "idle", done: 0, total: 0, top: [], why: "" };
+  var burstKey = (c) => [c.found ? 1 : 0, c.measurable ? 1 : 0, c.found ? c.sharp * c.seen * (1 - c.reflets) : 0];
+  var better = (a, b) => {
+    const A = burstKey(a), B = burstKey(b);
+    for (let i = 0; i < 3; i++) if (A[i] !== B[i]) return A[i] > B[i];
+    return false;
+  };
+  function stopBurst() {
+    burst.gen++;
+    if (burst.status === "busy" || burst.status === "done") burst.status = "idle";
+    burst.top = [];
+    $("#irisBurstList").innerHTML = "";
+  }
+  async function runBurst(s, files) {
+    if (!agreed()) return toast("Cochez d'abord l'accord des personnes photographiées.");
+    const n0 = files.length;
+    files = files.filter((f) => f.size && f.size <= MAX_BYTES && (!f.type || f.type.startsWith("image/")));
+    if (!files.length) return toast("Aucune photo utilisable dans la sélection.");
+    if (files.length < n0) toast(`${n0 - files.length} fichier(s) écarté(s) : vide, plus de 20 Mo ou pas une image.`);
+    if (files.length === 1) return loadFile(s, files[0]);
+    if (files.length > MAX_BURST) {
+      toast(`Seules les ${MAX_BURST} premières photos sont analysées.`);
+      files = files.slice(0, MAX_BURST);
+    }
+    const gen = ++burst.gen;
+    Object.assign(burst, { s, status: "busy", done: 0, total: files.length, top: [], why: "" });
+    $("#irisBurstList").innerHTML = "";
+    $("#irisBurstMsg").textContent = `Analyse de ${files.length} photos…`;
+    $("#irisBurstProg").hidden = false;
+    openDialog($("#irisBurstSheet"), () => {
+      if (burst.gen === gen) stopBurst();
+    });
+    const fails = { notfound: 0, small: 0 };
+    for (let n = 0; n < files.length; n++) {
+      if (burst.gen !== gen) return;
+      $("#irisBurstProg").value = n / files.length;
+      $("#irisBurstStep").textContent = `Photo ${n + 1} sur ${files.length}`;
+      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, measurable: false, sharp: 0, seen: 0, reflets: 0, d: 0, thumb: null };
+      try {
+        const full = await decodeFull(files[n]);
+        let cv, g, k;
+        try {
+          const W = full.width || full.naturalWidth, H = full.height || full.naturalHeight;
+          k = Math.min(1, MAX_SIDE / Math.max(W, H));
+          cv = makeCanvas(W * k, H * k);
+          g = ctx2d(cv);
+          g.imageSmoothingEnabled = true;
+          g.imageSmoothingQuality = "high";
+          g.drawImage(full, 0, 0, cv.width, cv.height);
+        } finally {
+          full.close?.();
+        }
+        const img = g.getImageData(0, 0, cv.width, cv.height), lm = await segmentIris(img);
+        if (burst.gen !== gen) return;
+        if (lm && validLandmarks(lm, img.width, img.height)) {
+          c.found = true;
+          c.d = irisDiameter(lm) / k;
+          c.measurable = c.d >= MIN_MEASURE_PX;
+          c.seen = lm.seen ?? 1;
+          Object.assign(c, photoQuality(img, lm));
+          const half = irisDiameter(lm) / 2 * 1.3, t = makeCanvas(160, 160);
+          ctx2d(t).drawImage(cv, lm.cx - half, lm.cy - half, 2 * half, 2 * half, 0, 0, 160, 160);
+          c.thumb = t;
+        } else fails.notfound++;
+        if (c.found && !c.measurable) fails.small++;
+        cv.width = cv.height = 0;
+      } catch (e) {
+        console.warn(e);
+        fails.notfound++;
+      }
+      burst.done = n + 1;
+      if (c.found) {
+        burst.top.push(c);
+        burst.top.sort((a, b) => better(a, b) ? -1 : better(b, a) ? 1 : 0);
+        for (const x of burst.top.splice(3)) x.file = x.thumb = null;
+      }
+      await yieldNow3();
+    }
+    if (burst.gen !== gen) return;
+    burst.status = "done";
+    $("#irisBurstProg").value = 1;
+    $("#irisBurstProg").hidden = true;
+    $("#irisBurstStep").textContent = "";
+    renderBurst(fails);
+  }
+  function burstReason(c, i) {
+    const net = c.sharp >= 0.5 ? "nette" : c.sharp >= SHARPNESS_MIN ? "un peu floue" : "floue";
+    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.round(c.d)} px${c.measurable ? "" : " (trop petit pour mesurer)"}`, `bord vu à ${Math.round(c.seen * 100)} %`];
+    if (c.reflets >= 0.03) parts.push(`reflets ${Math.round(c.reflets * 100)} %`);
+    return parts.join(" · ");
+  }
+  function renderBurst(fails) {
+    const T2 = burst.top, box = $("#irisBurstList");
+    if (!T2.length) {
+      burst.why = "Iris trouvé sur aucune photo : rapprochez-vous (iris d'au moins un tiers de la largeur), lumière du jour de côté, sans flash.";
+      $("#irisBurstMsg").textContent = burst.why;
+      return;
+    }
+    const allSmall = T2.every((c) => !c.measurable), allBlur = T2.every((c) => c.sharp < SHARPNESS_MIN);
+    burst.why = allSmall ? "Aucune photo assez rapprochée pour mesurer les motifs : vous pouvez en choisir une pour comparer à l'œil, ou refaire la rafale plus près." : allBlur ? "Toutes les photos sont floues : stabilisez le téléphone (appui), lumière du jour, puis refaites la rafale." : "";
+    $("#irisBurstMsg").textContent = `${burst.total} photos analysées : ${T2.length === 1 ? "la meilleure" : `les ${T2.length} meilleures`} ci-dessous. Choisissez-en une.${burst.why ? " " + burst.why : ""}`;
+    box.innerHTML = T2.map((c, i) => `<figure><span class="hint">${esc(c.name)}</span><p class="hint">${esc(burstReason(c, i))}</p><button type="button" class="btn small${i === 0 ? " primary" : ""}" data-pick="${i}">Choisir la photo ${i + 1}</button></figure>`).join("");
+    T2.forEach((c, i) => $$("figure", box)[i].prepend(c.thumb));
+    T2.forEach((c) => c.thumb && (c.thumb.setAttribute("role", "img"), c.thumb.setAttribute("aria-label", `Iris de ${c.name}`)));
+    $("[data-pick]", box)?.focus();
+  }
+  function initBurst() {
+    $("#irisBurstList").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-pick]");
+      if (!b || burst.status !== "done") return;
+      const c = burst.top[Number(b.dataset.pick)], s = burst.s;
+      if (!c?.file || !s) return;
+      const f = c.file;
+      closeDialog();
+      stopBurst();
+      loadFile(s, f);
+    });
+  }
   var irisState = () => ({
+    fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1) } : null,
+    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3) })) },
     slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
     text: resultText()

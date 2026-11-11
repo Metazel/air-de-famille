@@ -276,7 +276,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.5.1</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.6.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -382,19 +382,32 @@
 <div class="sheet" id="irisFixSheet" hidden role="dialog" aria-modal="true" aria-labelledby="irisFixTitle">
   <div class="sheet-in">
     <div class="sheet-head"><h3 id="irisFixTitle">Corriger les repères<span id="irisFixWho"></span></h3><button type="button" class="btn" data-close>Fermer</button></div>
-    <p class="hint">Faites glisser les trois poignées, ou choisissez une poignée puis utilisez les boutons ou les flèches du clavier (touche Maj : déplacement plus grand).</p>
+    <p class="hint">Faites glisser les quatre poignées : centre et bord de la pupille (Cp, P), centre et bord de l'iris (Ci, I). Zoomez (deux doigts, molette, + / −) et faites glisser la photo pour placer les centres précisément. Au clavier : flèches (Maj : plus grand), + / − pour zoomer, 0 pour toute la photo.</p>
+    <div class="pad" id="irisZoom" role="group" aria-label="Zoom sur la photo"><button type="button" class="btn small" data-zoom="out" aria-label="Dézoomer">−</button><span class="hint" id="irisZoomVal" aria-live="off"></span><button type="button" class="btn small" data-zoom="in" aria-label="Zoomer">+</button><button type="button" class="btn small" data-zoom="all">Toute la photo</button><button type="button" class="btn small" data-zoom="iris">Revenir à l'iris</button></div>
     <div class="fixwrap" id="irisFixWrap">
       <canvas id="irisFixCanvas" width="600" height="600" role="img" aria-label="Gros plan de l'iris avec le cercle de la pupille et le contour de l'iris"></canvas>
-      <button type="button" class="hdl" data-h="c" aria-label="C, centre de la pupille" data-autofocus>C</button>
+      <button type="button" class="hdl" data-h="c" aria-label="Cp, centre de la pupille" data-autofocus>Cp</button>
       <button type="button" class="hdl" data-h="p" aria-label="P, bord de la pupille">P</button>
+      <button type="button" class="hdl" data-h="ic" aria-label="Ci, centre de l'iris">Ci</button>
       <button type="button" class="hdl" data-h="i" aria-label="I, bord de l'iris">I</button>
     </div>
-    <div class="seg" id="irisFixSel" role="group" aria-label="Poignée à déplacer"><button type="button" data-sel="c" aria-pressed="true">C : centre</button><button type="button" data-sel="p" aria-pressed="false">P : pupille</button><button type="button" data-sel="i" aria-pressed="false">I : bord de l'iris</button></div>
-    <div class="pad" id="irisPadMove" role="group" aria-label="Déplacer le centre"><button type="button" class="btn small" data-nudge="-1,0">← Gauche</button><button type="button" class="btn small" data-nudge="0,-1">↑ Haut</button><button type="button" class="btn small" data-nudge="0,1">↓ Bas</button><button type="button" class="btn small" data-nudge="1,0">→ Droite</button></div>
+    <div class="seg" id="irisFixSel" role="group" aria-label="Poignée à déplacer"><button type="button" data-sel="c" aria-pressed="true">Cp : centre pupille</button><button type="button" data-sel="p" aria-pressed="false">P : bord pupille</button><button type="button" data-sel="ic" aria-pressed="false">Ci : centre iris</button><button type="button" data-sel="i" aria-pressed="false">I : bord iris</button></div>
+    <div class="pad" id="irisPadMove" role="group" aria-label="Déplacer le centre choisi"><button type="button" class="btn small" data-nudge="-1,0">← Gauche</button><button type="button" class="btn small" data-nudge="0,-1">↑ Haut</button><button type="button" class="btn small" data-nudge="0,1">↓ Bas</button><button type="button" class="btn small" data-nudge="1,0">→ Droite</button></div>
     <div class="pad" id="irisPadSize" role="group" aria-label="Taille du cercle" hidden><button type="button" class="btn small" data-size="-1">− Plus petit</button><button type="button" class="btn small" data-size="1">+ Plus grand</button></div>
     <p class="hint" id="irisFixVals" aria-live="polite"></p>
     <figure class="fixband"><canvas id="irisFixBand" width="360" height="64" aria-hidden="true"></canvas><figcaption class="hint">Aperçu du déroulé, mis à jour à chaque correction.</figcaption></figure>
     <div class="actions"><button type="button" class="btn primary" id="irisFixOk">Valider</button><button type="button" class="btn" id="irisFixAuto">Revenir au repérage automatique</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="irisBurstSheet" hidden role="dialog" aria-modal="true" aria-labelledby="irisBurstTitle">
+  <div class="sheet-in">
+    <div class="sheet-head"><h3 id="irisBurstTitle">Choisir la meilleure photo de la rafale</h3><button type="button" class="btn" data-close data-autofocus>Fermer</button></div>
+    <p class="hint">Les photos sont analysées sur ce téléphone, une par une ; seules les 3 meilleures restent affichées, les autres sont oubliées aussitôt. Fermer arrête l'analyse.</p>
+    <progress id="irisBurstProg" max="1" value="0" aria-label="Analyse de la rafale"></progress>
+    <p class="hint" id="irisBurstStep"></p>
+    <p id="irisBurstMsg" role="status"></p>
+    <div class="burstlist" id="irisBurstList"></div>
   </div>
 </div>
 

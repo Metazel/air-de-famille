@@ -3,6 +3,15 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.6.0] — 2026-11-11
+
+- Rafale (AdF-069) : « Plusieurs photos (rafale) » importe 2 à 20 photos du même œil ; l'appli les analyse une par
+  une sur le téléphone, garde les 3 meilleures (iris trouvé, assez grand pour mesurer, net, bord visible, peu de
+  reflets), affiche la raison et laisse choisir ; les autres photos sont oubliées aussitôt. Fermer arrête l'analyse.
+- Correction des repères (AdF-068) : quatre poignées indépendantes (centre et bord de la pupille, centre et bord de
+  l'iris), zoom (deux doigts, molette, boutons, clavier) et déplacement sur toute la photo.
+- Tests : 180 contrôles e2e publics (rafale classée, annulation, choix ; poignées, zoom et déplacement).
+
 ## [v2.5.1] — 2026-11-10
 
 Corrections de l'onglet Iris après l'essai de David sur téléphone (AdF-056 à AdF-060).
