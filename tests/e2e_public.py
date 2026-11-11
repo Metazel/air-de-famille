@@ -846,6 +846,16 @@ with sync_playwright() as p:
     importer(1, fGrand)
     lg = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
     check("Iris (AdF-058) : grande photo → iris repéré puis découpé à pleine résolution (rayon 300 px, pas 180)", lg and abs(lg["ri"] - 300) / 300 < 0.04 and abs(lg["rp"] - 85) / 85 < 0.06, lg)
+    # AdF-071 : la correction montre la photo entière (2 400 px de large après réduction), pas le recadrage.
+    pi.click(".islot[data-i='1'] [data-act=fix]")
+    pi.wait_for_selector("#irisFixSheet:not([hidden])")
+    attendre(pi, "AirDeFamille.iris.state().fix?.full", 15000)
+    pi.click("#irisZoom button[data-zoom='all']")
+    fv = pi.evaluate("AirDeFamille.iris.state().fix")
+    pi.click("#irisFixOk")
+    attendre(pi, "document.querySelector('#irisFixSheet').hidden", 15000)
+    lg2 = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
+    check("Iris (AdF-071) : correction sur la photo entière, puis découpe à pleine résolution inchangée", fv["half"] > 1100 and lg2 and abs(lg2["ri"] - lg["ri"]) < 2, [fv, lg2])
     importer(1, fVisage)
     sv = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris (AdF-065) : photo du visage → l'œil est trouvé (pas la barbe, l'oreille ni le sourcil), pupille comprise",

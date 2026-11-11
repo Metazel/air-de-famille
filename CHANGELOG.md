@@ -3,6 +3,13 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.6.1] — 2026-11-11
+
+- Correction des repères sur la photo entière (AdF-071) : la photo d'origine est relue le temps de la correction ;
+  le recadrage à pleine résolution n'est fait qu'après « Valider ». Hors de l'iris, la vignette est grisée.
+- Relecture séparée (AdF-074) : découpe en échec, fenêtre rouverte pendant la découpe, geste en cours, mémoire.
+- Tests : 181 contrôles e2e publics.
+
 ## [v2.6.0] — 2026-11-11
 
 - Rafale (AdF-069) : « Plusieurs photos (rafale) » importe 2 à 20 photos du même œil ; l'appli les analyse une par

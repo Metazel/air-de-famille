@@ -39,14 +39,22 @@ jobs:
           python-version: '3.12'
 
       - name: Outils de test (versions fixées)
+        id: outils
         run: |
           pip install playwright==1.63.0 pillow==12.3.0
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
           npm install --prefix tests --no-save --no-package-lock axe-core@4.14.0
+          # Dépendances système : miroirs Ubuntu parfois injoignables depuis le runner (11/11/2026). En cas d'échec,
+          # le Chrome déjà installé sur le runner sert aux tests.
+          if ! python -m playwright install-deps chromium; then
+            echo "::warning::Dépendances système de Chromium non installées : Chrome du runner utilisé"
+            echo "chrome=$(command -v google-chrome || command -v google-chrome-stable)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Tests e2e publics (sans photo réelle)
         env:
           RAPPORT: rapport_e2e.json
+          CHROME: ${{ steps.outils.outputs.chrome }}
         run: python tests/e2e_public.py .
 
       - name: Rapport
