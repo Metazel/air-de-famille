@@ -5809,7 +5809,7 @@
       drawMarks(g, s.lm, (x) => (x - (s.lm.cx - half)) * k, (y) => (y - (s.lm.cy - half)) * k, k);
     }
     cv.setAttribute("role", "img");
-    cv.setAttribute("aria-label", s.lm ? `Iris ${s.i + 1} : repères placés (pupille et bord de l'iris)` : `Iris ${s.i + 1} : photo sans repères`);
+    cv.setAttribute("aria-label", s.lm ? `Iris ${s.i + 1} : repères placés (pupille et bord de l'iris), hors de l'iris grisé` : `Iris ${s.i + 1} : photo sans repères`);
   }
   function drawMarks(g, lm, X, Y, k) {
     const path = () => {
@@ -6114,6 +6114,7 @@
   }
   function openFix(s) {
     if (!s.src) return;
+    fix.seq = (fix.seq || 0) + 1;
     fix.s = s;
     fix.src = s.src;
     fix.img = s.img;
@@ -6127,23 +6128,28 @@
     selectHandle("c");
     openDialog($("#irisFixSheet"), () => {
       if (fix.s === s) fix.s = null;
+      if (fix.kFull && fix.src && fix.src !== s.src) fix.src.width = 0;
       fix.src = fix.img = null;
     });
     drawFix();
-    if (s.native && s.map) {
-      const gen = s.gen, m = s.map;
+    const m = s.map, whole = m && m.ox === 0 && m.oy === 0 && Math.abs(s.img.width / m.f - s.native?.W) < 2;
+    if (s.native && m && !whole) {
+      const gen = s.gen, seq2 = fix.seq;
       fullView(s).then((v) => {
-        if (fix.s !== s || gen !== s.gen || fix.kFull) return;
+        if (fix.s !== s || gen !== s.gen || fix.seq !== seq2 || fix.kFull) return void (v.src.width = 0);
         const X = (x) => (m.ox + x / m.f) * v.k, Y = (y) => (m.oy + y / m.f) * v.k, q = v.k / m.f;
         fix.lm = toFull(fix.lm, m, v.k);
         fix.cont = fix.cont.map(([x, y]) => [X(x), Y(y)]);
         fix.ox = X(fix.ox);
         fix.oy = Y(fix.oy);
         fix.half *= q;
+        if (fix.pan) fix.pan.ox = X(fix.pan.ox), fix.pan.oy = Y(fix.pan.oy);
+        if (fix.next) fix.next = [X(fix.next[0]), Y(fix.next[1])];
         fix.src = v.src;
         fix.img = v.img;
         fix.kFull = v.k;
         drawFix();
+        say3("Photo entière chargée : dézoomez pour la voir.");
       }).catch((e) => console.warn(e));
     }
   }
@@ -6390,19 +6396,21 @@
       }
       let lmV = copyLm(fix.lm);
       if (s.native) {
-        const g0 = s.gen;
+        const g0 = s.gen, seq2 = fix.seq, kF = fix.kFull, fSrc = fix.src, fImg = fix.img;
         $("#irisFixOk").disabled = true;
         $("#irisFixVals").textContent = "Découpe de l'iris dans la photo d'origine…";
         let done = null;
         try {
-          done = await recropNative(fix.kFull ? { native: s.native, gen: s.gen, img: fix.img, map: { ox: 0, oy: 0, f: fix.kFull } } : s, lmV, g0);
-          if (!done && fix.kFull) done = { src: fix.src, img: fix.img, map: { ox: 0, oy: 0, f: fix.kFull }, lm: lmV };
+          done = await recropNative(kF ? { native: s.native, get gen() {
+            return s.gen;
+          }, img: fImg, map: { ox: 0, oy: 0, f: kF } } : s, lmV, g0);
         } catch (e) {
           console.warn(e);
         } finally {
           $("#irisFixOk").disabled = false;
         }
-        if (g0 !== s.gen || fix.s !== s) return;
+        if (!done && kF) done = { src: fSrc, img: fImg, map: { ox: 0, oy: 0, f: kF }, lm: lmV };
+        if (g0 !== s.gen || fix.s !== s || fix.seq !== seq2) return;
         if (done) {
           Object.assign(s, { src: done.src, img: done.img, map: done.map });
           lmV = done.lm;
