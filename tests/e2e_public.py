@@ -14,7 +14,7 @@ axe-core WCAG A/AA (5 onglets, thèmes clair et sombre), largeur téléphone, fo
 au clavier, entrées aux limites, stockage local, service worker et hors ligne.
 v2.5 (AdF-039) : onglet Iris sur des iris de synthèse (repérage, correction au clavier et
 par boutons, œil gauche/droit, qui a transmis quoi, partage en texte seul, base locale,
-essai du selfie éclairé : lumière progressive et coupée à la fermeture).
+v2.5.1 : repérage sur photo ordinaire, reflets gris, découpe à pleine résolution, selfie retiré).
 """
 import sys, os, json, time, random, tempfile, threading, functools, subprocess, http.server, socketserver
 from urllib.parse import urlparse
@@ -224,9 +224,13 @@ with sync_playwright() as p:
     # Progression de l'analyse (CU6) et annulation
     prog = page.evaluate("window.__prog")
     check("Analyse : progression par étapes nommées", any("Étape" in t for t in prog), prog[:4])
+    # Processeur ralenti ×8 le temps de cliquer : sans cela, une machine rapide finit l'analyse avant le clic (AdF-064).
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": 8})
     page.set_input_files("#file0", os.path.join(FIX, "geante.jpg"))
-    page.wait_for_selector(".slot[data-i='0'] .prog:not([hidden]) .pcancel", timeout=5000)
-    page.click(".slot[data-i='0'] .pcancel")
+    # Bouton visible seulement (d'autres emplacements « 0 » existent dans les onglets masqués).
+    page.locator("#slots .slot[data-i='0'] .prog:not([hidden]) .pcancel").first.click(timeout=15000)
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": 1})
     page.wait_for_timeout(400)
     st = page.evaluate("[AirDeFamille.slots[0].status, !!document.querySelector('.slot[data-i=\"0\"] .prog:not([hidden])')]")
     check("Analyse : annulation possible, la photo est retirée", st == ["empty", False], st)
@@ -660,11 +664,35 @@ with sync_playwright() as p:
         url = pi.evaluate("""(p) => { const im = irisSynthetique(p), c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
           c.getContext('2d').putImageData(new ImageData(im.data, im.width, im.height), 0, 0); return c.toDataURL('image/png'); }""", params)
         f = os.path.join(FIX, nom); open(f, "wb").write(base64.b64decode(url.split(",", 1)[1])); return f
+    def importer(i, f, final="s.status !== 'busy'", delai=40000):
+        """Import réel par le champ fichier, puis attente d'un état nouveau (génération changée), jamais d'un état déjà vrai."""
+        g0 = pi.evaluate(f"AirDeFamille.iris.state().slots[{i}].gen")
+        pi.set_input_files(f".islot[data-i='{i}'] input[type=file]", f)
+        attendre(pi, f"(() => {{ const s = AirDeFamille.iris.state().slots[{i}]; return s.gen > {g0} && ({final}); }})()", delai)
     PA = {"fond": "oeil", "collerette": 0.36, "contraste": -20, "coeur": 14, "coeurAmp": 34, "sillons": 6, "sillonsAmp": 20, "cryptes": 2, "graine": 3}
-    PB = {"fond": "blanc", "collerette": 0.36, "contraste": 12, "coeur": 44, "coeurAmp": 12, "spirales": 36, "spiralesAmp": 26, "cryptes": 24, "graine": 5}
+    # Cœur de Marc presque sans filaments (amplitude 3) : la mesure (part des filaments rayonnants) compare une
+    # orientation, pas un nombre de filaments ; avant AdF-067, l'écart venait du saut de la collerette, pas du cœur.
+    PB = {"fond": "blanc", "collerette": 0.36, "contraste": 12, "coeur": 44, "coeurAmp": 3, "spirales": 36, "spiralesAmp": 26, "cryptes": 24, "graine": 5}
     PC = {"fond": "oeil", "collerette": 0.36, "contraste": 12, "coeur": 14, "coeurAmp": 34, "spirales": 36, "spiralesAmp": 26, "cryptes": 24, "graine": 9}
     fA, fB, fC = iris_png("iris_a.png", PA), iris_png("iris_b.png", PB), iris_png("iris_c.png", PC)
     fBruit = iris_png("iris_bruit.png", {"fond": "oeil", "coeurAmp": 0, "milieuAmp": 0, "sillonsAmp": 0, "spiralesAmp": 0, "cryptes": 0, "contraste": 0, "bruit": 4})
+    # Photo du visage (3 000 × 2 400) : petit œil, barbe très sombre, oreille rouge, sourcil (AdF-065).
+    fVisage = iris_png("iris_visage.png", {"w": 3000, "h": 2400, "cx": 1800, "cy": 700, "ri": 110, "rp": 40, "fond": "oeil", "couleur": [70, 45, 30],
+                       "coeur": 30, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14,
+                       "taches": [{"x": 500, "y": 1700, "rx": 450, "ry": 600, "c": [8, 8, 8]}, {"x": 120, "y": 1100, "rx": 110, "ry": 260, "c": [200, 95, 85]},
+                                  {"x": 1800, "y": 470, "rx": 330, "ry": 45, "c": [50, 40, 35]}]})
+    fPetitGrand = iris_png("iris_petit_grand.png", {"w": 5000, "h": 3000, "cx": 2500, "cy": 1500, "ri": 100, "rp": 28, "fond": "oeil", "coeur": 30})
+    fBleu = iris_png("iris_bleu.png", {"w": 1800, "h": 1200, "cx": 900, "cy": 600, "ri": 260, "rp": 70, "fond": "oeil", "couleur": [150, 170, 190], "coeur": 30, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14})
+    fFonceFlou = iris_png("iris_fonce_flou.png", {"fond": "oeil", "couleur": [45, 30, 20], "coeur": 30, "coeurAmp": 26, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14, "flou": 10})
+    fAnneau = iris_png("iris_anneau.png", {"fond": "oeil", "couleur": [130, 150, 170], "coeur": 30, "coeurAmp": 26, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 14, "anneau": 30, "reflet": False})
+    # Photo pivotée : pixels tournés et étiquette EXIF « Orientation = 6 » ; affichée droite, l'iris est en (450, 350).
+    from PIL import Image as _Im
+    _rot = _Im.open(fA).convert("RGB").rotate(90, expand=True)
+    _ex = _rot.getexif(); _ex[0x0112] = 6
+    fPivot = os.path.join(FIX, "iris_pivote.jpg"); _rot.save(fPivot, "JPEG", quality=92, exif=_ex.tobytes())
+    Image.new("RGB", (4000, 2400), (128, 128, 128)).save(os.path.join(FIX, "gris_grand.png")); fGrisGrand = os.path.join(FIX, "gris_grand.png")
+    fGrand = iris_png("iris_grand.png", {"w": 4000, "h": 2400, "cx": 2100, "cy": 1150, "ri": 300, "rp": 85, "fond": "oeil", "coeur": 30, "spirales": 30, "spiralesAmp": 14, "sillonsAmp": 12})
+    fMoyen = iris_png("iris_moyen.png", {"w": 700, "h": 560, "cx": 350, "cy": 280, "ri": 110, "rp": 30, "fond": "oeil"})
     fPetit = iris_png("iris_petit.png", {"w": 300, "h": 240, "cx": 150, "cy": 120, "ri": 34, "rp": 10, "fond": "oeil"})
     Image.new("RGB", (640, 480), (128, 128, 128)).save(os.path.join(FIX, "gris.png")); fGris = os.path.join(FIX, "gris.png")
     check("Iris : onglet affiché depuis l'adresse #iris", pi.is_visible("#iris") and pi.get_attribute("#tab-iris", "aria-selected") == "true")
@@ -698,10 +726,13 @@ with sync_playwright() as p:
     pi.click("#irisGo")
     attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
     txt = pi.evaluate("AirDeFamille.iris.state().text")
-    attendu = ["Filaments du cœur : Plus proche de : Anna", "Filaments du milieu : Plus proche de : Anna", "Sillons du pourtour : Plus proche de : Marc",
+    # Milieu : par construction, les trois iris ont le même dessin de milieu (seules les cryptes diffèrent) ; le verdict
+    # bascule d'un côté à l'autre pour un pixel de pupille (AdF-046) : non contrôlé, comme les cryptes. Avant AdF-065,
+    # le saut de clarté de la collerette, compté à tort comme motif, le faisait pencher vers Anna.
+    attendu = ["Filaments du cœur : Plus proche de : Anna", "Sillons du pourtour : Plus proche de : Marc",
                "Spirales du pourtour : Plus proche de : Marc", "Position de la collerette : Égalité entre Anna et Marc", "Contraste cœur / pourtour : Plus proche de : Marc"]
     # Cryptes : mesure encore peu sensible (AdF-046), non contrôlée ici ; présente et sans total.
-    check("Iris (I4) : 6 motifs sur 7 penchent du côté attendu (trio construit), cryptes affichées, sans total", all(a in txt for a in attendu) and "Cryptes : " in txt and "%" not in txt and "score" not in txt.lower(), txt)
+    check("Iris (I4) : 5 motifs sur 7 penchent du côté attendu (trio construit ; milieu et cryptes non contrôlés), cryptes affichées, sans total", all(a in txt for a in attendu) and "Cryptes : " in txt and "%" not in txt and "score" not in txt.lower(), txt)
     check("Iris (I4) : mention « indice, pas une preuve »", "Indice, pas une preuve" in pi.inner_text("#irisResults"))
     check("Iris (I3) : trois bandes déroulées, décrites en texte pour TalkBack", pi.locator("#irisBands canvas").count() == 3 and all(len(pi.locator("#irisBands canvas").nth(k).get_attribute("aria-label") or "") > 120 for k in range(3)))
     ctx.remove_listener("request", ecoute)
@@ -792,17 +823,77 @@ with sync_playwright() as p:
         pass
     m1 = pi.evaluate("AirDeFamille.iris.state().slots[1].msg")
     check("Iris : iris trop petit (moins de 80 px) refusé avec la raison", "trop petit" in m1, m1)
-    pi.set_input_files(".islot[data-i='1'] input[type=file]", fBruit)
+    # Grande photo (4 000 × 2 400) : l'iris est découpé dans la photo d'origine, à pleine résolution (AdF-058).
+    importer(1, fGrand)
+    lg = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
+    check("Iris (AdF-058) : grande photo → iris repéré puis découpé à pleine résolution (rayon 300 px, pas 180)", lg and abs(lg["ri"] - 300) / 300 < 0.04 and abs(lg["rp"] - 85) / 85 < 0.06, lg)
+    importer(1, fVisage)
+    sv = pi.evaluate("AirDeFamille.iris.state().slots[1]")
+    check("Iris (AdF-065) : photo du visage → l'œil est trouvé (pas la barbe, l'oreille ni le sourcil), pupille comprise",
+          sv["status"] == "ready" and sv["lm"] and abs(sv["lm"]["ri"] - 110) / 110 < 0.08 and abs(sv["lm"]["rp"] - 40) / 40 < 0.15, sv)
+    # Grande photo (5 000 × 3 000) avec un petit iris (200 px) : jugé à pleine résolution, accepté et signalé (AdF-062).
+    importer(1, fPetitGrand)
+    sp = pi.evaluate("AirDeFamille.iris.state().slots[1]")
+    check("Iris (AdF-062) : grande photo, petit iris → taille jugée à pleine résolution (rayon 100 px), comparaison à l'œil annoncée",
+          sp["status"] == "ready" and sp["lm"] and abs(sp["lm"]["ri"] - 100) / 100 < 0.05 and "moins de 300" in sp["msg"], sp)
+    # Chemin manuel sur une grande photo : à la validation, l'iris est redécoupé à pleine résolution (AdF-061).
+    importer(1, fGrisGrand, "s.status === 'tofix'")
+    ech0 = pi.evaluate("AirDeFamille.iris.state().slots[1].echelle")
+    # Fenêtre fermée pendant la découpe : rien n'est appliqué à moitié (image et repères toujours ensemble).
+    if pi.is_hidden("#irisFixSheet"):
+        pi.click(".islot[data-i='1'] [data-act=fix]")
+    pi.click("#irisFixOk")
+    pi.keyboard.press("Escape")
+    pi.wait_for_timeout(2500)
+    sx = pi.evaluate("AirDeFamille.iris.state().slots[1]")
+    check("Iris (relecture finale) : fenêtre fermée pendant la découpe → correction abandonnée ou appliquée en entier",
+          (sx["status"] == "tofix" and sx["echelle"] == ech0) or (sx["status"] == "ready" and sx["echelle"] > 0.65), sx)
+    if pi.is_hidden("#irisFixSheet"):
+        pi.click(".islot[data-i='1'] [data-act=fix]")
+    pi.click("#irisFixOk")
     attendre(pi, "AirDeFamille.iris.state().slots[1].status === 'ready'", 20000)
+    ech1 = pi.evaluate("AirDeFamille.iris.state().slots[1].echelle")
+    check("Iris (AdF-061) : repères placés à la main sur une grande photo → découpe refaite dans la photo d'origine", ech0 == 0.6 and ech1 and ech1 > 0.65, [ech0, ech1])
+    # Photo pivotée (EXIF) : repérée dans le bon sens.
+    importer(1, fPivot)
+    lp = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
+    check("Iris : photo pivotée (EXIF Orientation 6) → iris repéré dans le bon sens", lp and abs(lp["cx"] - 450) < 10 and abs(lp["cy"] - 350) < 10 and abs(lp["ri"] - 260) / 260 < 0.04, lp)
+    # Iris bleu sur une photo plus large (peau plus claire que l'iris) : repéré (AdF-061).
+    importer(1, fBleu)
+    lb = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
+    check("Iris (AdF-061) : iris bleu repéré (bord à 4 % près)", lb and abs(lb["ri"] - 260) / 260 < 0.04 and abs(lb["rp"] - 70) / 70 < 0.08, lb)
+    # Iris foncé et flou : motifs non mesurés (AdF-061).
+    importer(1, fFonceFlou, "s.status === 'ready'")
+    pi.click("#irisGo")
+    attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
+    Ff = pi.evaluate("AirDeFamille.iris.state().results[1].F")
+    check("Iris (AdF-061) : iris foncé et flou → motifs « non mesurables »", sum(1 for k in Ff if Ff[k] is None) >= 6, Ff)
+    # Collerette claire : jamais prise pour un reflet, mesurée (AdF-061).
+    importer(1, fAnneau, "s.status === 'ready'")
+    pi.click("#irisGo")
+    attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
+    Fa = pi.evaluate("AirDeFamille.iris.state().results[1].F")
+    check("Iris (AdF-061) : collerette claire mesurée, pas effacée comme un reflet", Fa["collerette"] is not None and Fa["cryptes_densite"] is not None, Fa)
+    # Iris de 220 px : un seul avertissement « trop petit », fiches « non mesuré ».
+    importer(1, fMoyen, "s.status === 'ready'")
+    pi.click("#irisGo")
+    attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
+    check("Iris (AdF-058) : iris de moins de 300 px → un seul avertissement, fiches « non mesuré (iris trop petit) »",
+          pi.is_visible("#irisSmallWarn") and "300" in pi.inner_text("#irisSmallWarn") and "non mesuré (iris trop petit)" in pi.inner_text("#irisTable") and "minimum 300" not in pi.inner_text("#irisTable"), pi.inner_text("#irisSmallWarn"))
+    importer(1, fBruit, "s.status === 'ready'")
     pi.click("#irisGo")
     attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
     Fb = pi.evaluate("AirDeFamille.iris.state().results[1].F")
     check("Iris (AdF-054) : iris sans motif mais bruité (téléphone) → motifs « non mesurables »", all(Fb[k] is None for k in Fb if k != "clarte_coeur_bord"), Fb)
+    s_av = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     for f, mot in ((os.path.join(FIX, "vide.jpg"), "vide"), (os.path.join(FIX, "texte.jpg"), "illisible")):
         pi.set_input_files(".islot[data-i='1'] input[type=file]", f)
         pi.wait_for_timeout(600)
     tt = pi.inner_text("#toasts").lower()
     check("Iris : fichier vide ou illisible → message, sans erreur", "vide" in tt and ("illisible" in tt or "pas une image" in tt), tt[-200:])
+    s_ap = pi.evaluate("AirDeFamille.iris.state().slots[1]")
+    check("Iris (AdF-063) : photo illisible → l'emplacement revient à son état d'avant (iris et message gardés)",
+          s_ap["status"] == s_av["status"] == "ready" and s_ap["lm"] == s_av["lm"] and s_ap["msg"] == s_av["msg"], [s_av["status"], s_ap["status"], s_ap["msg"]])
     # Base locale (R2)
     pi.click("#tab-album")
     pi.click("#baseEnable")
@@ -824,6 +915,9 @@ with sync_playwright() as p:
     attendre(pi, "AirDeFamille.iris.state().slots[1].status === 'ready' && AirDeFamille.iris.state().slots[1].kept", 10000)
     s1 = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris : iris rechargé depuis ma base avec ses repères, sans refaire la correction", s1["eye"] == "D" and "repris" in s1["msg"], s1)
+    pi.click(".islot[data-i='1'] [data-act=fix]")
+    check("Iris (AdF-062) : iris de la base → pas de « Revenir au repérage automatique » sur l'iris grisé", pi.is_hidden("#irisFixAuto"))
+    pi.keyboard.press("Escape")
     # Iris supprimé dans un autre onglet (vraie seconde page) : synchronisation, fenêtre de choix refaite (AdF-054).
     pi.set_input_files(".islot[data-i='2'] input[type=file]", fGris)
     attendre(pi, "AirDeFamille.iris.state().slots[2].status === 'tofix'", 20000)
@@ -876,41 +970,7 @@ with sync_playwright() as p:
     pi.click("#tab-album"); pi.click("#baseWipe"); pi.wait_for_timeout(700); pi.click("#baseWipe")
     attendre(pi, "!AirDeFamille.baseState().on", 5000)
     pi.click("#tab-iris")
-    # Essai du selfie éclairé (R8)
-    pi.click("#irisSelfieBtn")
-    check("Selfie iris : démarrage bloqué tant que l'accord n'est pas coché", pi.is_disabled("#irisCamGo"))
-    pi.check("#irisCamConsent")
-    pi.click("#irisCamGo")
-    attendre(pi, "AirDeFamille.iris.selfie().stream", 15000)
-    lum = []
-    for _ in range(12):
-        lum.append(pi.evaluate("AirDeFamille.iris.selfie().lamp")); pi.wait_for_timeout(180)
-    check("Selfie iris (R8) : lumière montée progressivement, jamais redescendue (aucun clignotement)", lum[0] < 0.5 and lum[-1] == 1 and all(b >= a for a, b in zip(lum, lum[1:])), lum)
-    run_axe(pi, "Iris, selfie éclairé")
-    pi.evaluate("document.documentElement.dataset.theme = 'dark'")
-    run_axe(pi, "Iris, selfie éclairé, thème sombre")
-    pi.evaluate("delete document.documentElement.dataset.theme")
-    pi.click("#irisCamShot")
-    pi.wait_for_selector("#irisCamResult:not([hidden])", timeout=20000)
-    verdict = pi.inner_text("#irisCamVerdict")
-    check("Selfie iris : verdict de faisabilité affiché (caméra simulée : pas d'iris, photo non utilisable)", "non trouvé" in verdict and pi.is_disabled("#irisCamResult [data-use='0']"), verdict)
-    pi.evaluate("Object.defineProperty(document, 'hidden', {configurable: true, get: () => true}); document.dispatchEvent(new Event('visibilitychange'))")
-    sel = pi.evaluate("AirDeFamille.iris.selfie()")
-    check("Selfie iris (R8) : arrière-plan → caméra et lumière coupées aussitôt", not sel["stream"] and sel["lamp"] == 0 and pi.is_visible("#irisCamResume"), sel)
-    pi.evaluate("Object.defineProperty(document, 'hidden', {configurable: true, get: () => false})")
-    pi.click("#irisCamResume")
-    attendre(pi, "AirDeFamille.iris.selfie().stream", 15000)
-    # Repérage qui échoue pendant le selfie : la correction ne s'ouvre pas par-dessus (AdF-049).
-    pi.set_input_files(".islot[data-i='1'] input[type=file]", fGris)
-    attendre(pi, "AirDeFamille.iris.state().slots[1].status === 'tofix'", 20000)
-    sel = pi.evaluate("AirDeFamille.iris.selfie()")
-    check("Selfie iris (AdF-049) : aucune fenêtre ouverte par-dessus le selfie, qui reste utilisable", sel["stream"] and pi.is_visible("#irisCamSheet") and pi.is_hidden("#irisFixSheet"), sel)
-    pi.keyboard.press("Escape")
-    pi.click("#irisSelfieBtn"); pi.check("#irisCamConsent"); pi.click("#irisCamGo")
-    attendre(pi, "AirDeFamille.iris.selfie().stream", 15000)
-    pi.keyboard.press("Escape")
-    sel = pi.evaluate("AirDeFamille.iris.selfie()")
-    check("Selfie iris (R8) : fermeture → caméra et lumière arrêtées immédiatement, photo effacée", not sel["stream"] and sel["lamp"] == 0 and not sel["ramping"] and pi.evaluate("document.querySelector('#irisCamPreview').width") == 0, sel)
+    check("Iris (AdF-059) : essai du selfie retiré, conseils de prise de vue affichés", pi.locator("#irisSelfieBtn").count() == 0 and pi.locator("#irisCamSheet").count() == 0 and "caméra arrière" in pi.text_content("#iris"))
     avant = [s["has"] for s in pi.evaluate("AirDeFamille.iris.state().slots")]
     pi.click("#resetBtn")
     pi.wait_for_timeout(200)
@@ -918,6 +978,17 @@ with sync_playwright() as p:
     pi.locator("#toasts button", has_text="Annuler").first.click()
     pi.wait_for_timeout(300)
     check("Iris : « Annuler » après « Tout effacer » rend les iris", [s["has"] for s in pi.evaluate("AirDeFamille.iris.state().slots")] == avant and any(avant), avant)
+    # « Tout effacer » puis « Annuler » pendant l'ouverture d'une grande photo : jamais d'emplacement bloqué.
+    pi.set_input_files(".islot[data-i='2'] input[type=file]", fGrand)
+    pi.click("#resetBtn")
+    pi.locator("#toasts button", has_text="Annuler").first.click()
+    try:
+        attendre(pi, "AirDeFamille.iris.state().slots.every(s => s.status !== 'busy')", 15000)
+    except TimeoutError:
+        pass
+    so = pi.evaluate("AirDeFamille.iris.state().slots")
+    check("Iris (relecture finale) : « Tout effacer » puis « Annuler » pendant l'ouverture → aucun emplacement bloqué",
+          all(x["status"] != "busy" for x in so) and not pi.is_disabled(".islot[data-i='2'] [data-act=pick]"), [x["status"] for x in so])
     try:
         viol_i = pi.evaluate("window.__csp || []")
     except Exception:

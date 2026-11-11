@@ -2,7 +2,8 @@
 // Module sans DOM : renvoie { width, height, data } (RVBA). Utilisable sous Node et dans le navigateur.
 // Paramètres : fond « blanc » (iris détouré) ou « oeil » (peau, blanc de l'œil, paupières) ; position et rayons ;
 // couleur ; filaments du cœur et du milieu (nombre, intensité) ; sillons du pourtour ; spirales ; cryptes ;
-// position de la collerette ; contraste cœur / pourtour ; reflet.
+// position de la collerette ; contraste cœur / pourtour ; anneau clair à la collerette ; reflet ; flou (rayon en px) ;
+// taches unies en ellipse { x, y, rx, ry, c: [r, v, b] } peintes autour de l'œil (barbe, oreille, sourcil : AdF-065).
 function rng(seed) {
   let s = seed >>> 0 || 1;
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -10,7 +11,7 @@ function rng(seed) {
 export function irisSynthetique(o = {}) {
   const p = Object.assign(
     { w: 900, h: 700, fond: "blanc", cx: 450, cy: 350, ri: 260, rp: 70, couleur: [120, 82, 50], coeur: 18, coeurAmp: 26, milieu: 30, milieuAmp: 16,
-      sillons: 7, sillonsAmp: 0, spirales: 0, spiralesAmp: 0, cryptes: 6, collerette: 0.36, contraste: -22, reflet: true, graine: 7, bruit: 4 },
+      sillons: 7, sillonsAmp: 0, spirales: 0, spiralesAmp: 0, cryptes: 6, collerette: 0.36, contraste: -22, anneau: 0, reflet: true, graine: 7, bruit: 4, flou: 0, taches: [] },
     o
   );
   const R = rng(p.graine), d = new Uint8ClampedArray(p.w * p.h * 4);
@@ -25,6 +26,7 @@ export function irisSynthetique(o = {}) {
       else if (r <= p.ri) {
         const f = (r - p.rp) / (p.ri - p.rp), zig = p.collerette + 0.025 * Math.sin(12 * t + phase3);
         let v = f < zig ? p.contraste / 2 : -p.contraste / 2;
+        if (p.anneau) v += p.anneau * Math.exp(-(((f - zig) / 0.03) ** 2));
         if (f < zig) v += p.coeurAmp * Math.cos(p.coeur * t + phase1);
         else if (f < 0.66) v += p.milieuAmp * Math.cos(p.milieu * t + phase2);
         else {
@@ -47,6 +49,13 @@ export function irisSynthetique(o = {}) {
       if (p.fond === "oeil" && r <= p.ri && (dx / (p.ri * 2.3)) ** 2 + (dy / (p.ri * 0.95)) ** 2 > 1) c = [196, 150, 128];
       d[o4] = c[0]; d[o4 + 1] = c[1]; d[o4 + 2] = c[2]; d[o4 + 3] = 255;
     }
+  for (const k of p.taches)
+    for (let y = Math.max(0, Math.floor(k.y - k.ry)); y <= Math.min(p.h - 1, k.y + k.ry); y++)
+      for (let x = Math.max(0, Math.floor(k.x - k.rx)); x <= Math.min(p.w - 1, k.x + k.rx); x++) {
+        if (((x - k.x) / k.rx) ** 2 + ((y - k.y) / k.ry) ** 2 > 1) continue;
+        const o4 = (y * p.w + x) * 4;
+        d[o4] = k.c[0]; d[o4 + 1] = k.c[1]; d[o4 + 2] = k.c[2];
+      }
   if (p.reflet) {
     const rx = p.cx + p.rp * 0.35, ry = p.cy - p.rp * 0.4, rr = p.rp * 0.32;
     for (let y = Math.floor(ry - rr); y <= ry + rr; y++)
@@ -54,6 +63,29 @@ export function irisSynthetique(o = {}) {
         if (x < 0 || y < 0 || x >= p.w || y >= p.h || Math.hypot(x - rx, y - ry) > rr) continue;
         const o4 = (y * p.w + x) * 4;
         d[o4] = d[o4 + 1] = d[o4 + 2] = 252;
+      }
+  }
+  // Flou : moyennes glissantes horizontales puis verticales (trois passes ≈ flou gaussien).
+  if (p.flou > 0) {
+    const r = Math.round(p.flou), tmp = new Float32Array(p.w * p.h);
+    for (let c = 0; c < 3; c++)
+      for (let pass = 0; pass < 3; pass++) {
+        for (let y = 0; y < p.h; y++) {
+          let acc = 0;
+          for (let x = -r; x <= r; x++) acc += d[(y * p.w + Math.min(p.w - 1, Math.max(0, x))) * 4 + c];
+          for (let x = 0; x < p.w; x++) {
+            tmp[y * p.w + x] = acc / (2 * r + 1);
+            acc += d[(y * p.w + Math.min(p.w - 1, x + r + 1)) * 4 + c] - d[(y * p.w + Math.max(0, x - r)) * 4 + c];
+          }
+        }
+        for (let x = 0; x < p.w; x++) {
+          let acc = 0;
+          for (let y = -r; y <= r; y++) acc += tmp[Math.min(p.h - 1, Math.max(0, y)) * p.w + x];
+          for (let y = 0; y < p.h; y++) {
+            d[(y * p.w + x) * 4 + c] = acc / (2 * r + 1);
+            acc += tmp[Math.min(p.h - 1, y + r + 1) * p.w + x] - tmp[Math.max(0, y - r) * p.w + x];
+          }
+        }
       }
   }
   return { width: p.w, height: p.h, data: d, params: p };
