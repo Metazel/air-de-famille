@@ -770,9 +770,10 @@ with sync_playwright() as p:
     # Correction des repères (I2, R7)
     pi.click(".islot[data-i='0'] [data-act=fix]")
     pi.wait_for_selector("#irisFixSheet:not([hidden])")
-    noms = [pi.get_attribute(f"#irisFixWrap .hdl[data-h='{h}']", "aria-label") for h in "cpi"]
-    vis = [pi.inner_text(f"#irisFixWrap .hdl[data-h='{h}']") for h in "cpi"]
-    check("Iris (I2, WCAG 2.5.3) : trois poignées nommées, nom qui commence par le texte visible", noms == ["C, centre de la pupille", "P, bord de la pupille", "I, bord de l'iris"] and all(n.startswith(v) for n, v in zip(noms, vis)), [noms, vis])
+    HD = ["c", "p", "ic", "i"]
+    noms = [pi.get_attribute(f"#irisFixWrap .hdl[data-h='{h}']", "aria-label") for h in HD]
+    vis = [pi.inner_text(f"#irisFixWrap .hdl[data-h='{h}']") for h in HD]
+    check("Iris (I2, AdF-068, WCAG 2.5.3) : quatre poignées nommées, nom qui commence par le texte visible", noms == ["Cp, centre de la pupille", "P, bord de la pupille", "Ci, centre de l'iris", "I, bord de l'iris"] and all(n.startswith(v) for n, v in zip(noms, vis)), [noms, vis])
     taille = pi.evaluate("[...document.querySelectorAll('#irisFixWrap .hdl')].map(b => b.getBoundingClientRect().width)")
     check("Iris (R7) : poignées d'au moins 24 px", min(taille) >= 24, taille)
     pi.wait_for_timeout(450)
@@ -790,6 +791,24 @@ with sync_playwright() as p:
     pi.wait_for_timeout(450)
     v2 = pi.inner_text("#irisFixVals")
     check("Iris (R7, WCAG 2.5.7) : poignée réglable par boutons, sans glisser", v2 != v1, [v1, v2])
+    # AdF-068 : centre de l'iris déplacé seul (la pupille ne bouge pas), zoom et déplacement sur toute la photo.
+    pi.click("#irisFixSel button[data-sel='ic']")
+    for _ in range(3):
+        pi.click("#irisPadMove button[data-nudge='1,0']")
+    pi.wait_for_timeout(450)
+    v3 = pi.inner_text("#irisFixVals")
+    p2, p3 = (int(_re.search(r"Pupille : (\d+) px", v).group(1)) for v in (v2, v3))
+    e3 = int(_re.search(r"centres : (\d+) px", v3).group(1))
+    check("Iris (AdF-068) : centre de l'iris déplacé indépendamment de la pupille", e3 >= 3 and p2 == p3, [v2, v3])
+    z = lambda: int(pi.inner_text("#irisZoomVal").rstrip(" %"))
+    z0 = z(); pi.click("#irisZoom button[data-zoom='all']"); z1 = z(); pi.click("#irisZoom button[data-zoom='in']"); z2 = z()
+    vue = lambda: pi.evaluate("AirDeFamille.iris.state().fix")
+    f0 = vue()
+    box = pi.locator("#irisFixCanvas").bounding_box()
+    pi.mouse.move(box["x"] + 20, box["y"] + box["height"] - 20); pi.mouse.down(); pi.mouse.move(box["x"] + 120, box["y"] + box["height"] - 60, steps=4); pi.mouse.up()
+    f1 = vue()
+    pi.focus("#irisFixWrap .hdl:not([hidden])"); pi.keyboard.press("0"); z3 = z()
+    check("Iris (AdF-068) : zoom (toute la photo, +, touche 0) et déplacement de la photo au doigt", z1 < z0 and z2 > z1 and z3 == z1 and f1["ox"] < f0["ox"] and f1["oy"] > f0["oy"], [z0, z1, z2, z3, f0, f1])
     band_px = pi.evaluate("(() => { const c = document.querySelector('#irisFixBand'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) n += d[i] + d[i+1] + d[i+2] > 0; return n; })()")
     check("Iris (I2) : aperçu du déroulé mis à jour pendant la correction", band_px > 1000, band_px)
     run_axe(pi, "Iris, correction des repères")
@@ -971,6 +990,28 @@ with sync_playwright() as p:
     attendre(pi, "!AirDeFamille.baseState().on", 5000)
     pi.click("#tab-iris")
     check("Iris (AdF-059) : essai du selfie retiré, conseils de prise de vue affichés", pi.locator("#irisSelfieBtn").count() == 0 and pi.locator("#irisCamSheet").count() == 0 and "caméra arrière" in pi.text_content("#iris"))
+    # Rafale (AdF-069) : 5 photos (2 bonnes, 1 floue, 1 iris trop petit, 1 grand reflet) → les 2 bonnes en tête.
+    rf = [iris_png("rafale_bonne1.png", {"fond": "oeil", "graine": 11}), iris_png("rafale_floue.png", {"fond": "oeil", "graine": 13, "flou": 10}),
+          iris_png("rafale_petite.png", {"fond": "oeil", "ri": 60, "rp": 18}), iris_png("rafale_bonne2.png", {"fond": "oeil", "graine": 12, "coeurAmp": 30}),
+          iris_png("rafale_reflet.png", {"fond": "oeil", "taches": [{"x": 450, "y": 330, "rx": 150, "ry": 110, "c": [245, 245, 245]}]})]
+    pi.set_input_files(".islot[data-i='2'] input[data-f=burst]", rf)
+    pi.wait_for_selector("#irisBurstSheet:not([hidden])")
+    pi.click("#irisBurstSheet [data-close]")
+    pi.wait_for_timeout(300)
+    bx = pi.evaluate("AirDeFamille.iris.state().burst")
+    check("Iris (AdF-069) : fermer la fenêtre arrête l'analyse de la rafale, rien n'est gardé", bx["status"] == "idle" and not bx["top"], bx)
+    t0 = time.time()
+    pi.set_input_files(".islot[data-i='2'] input[data-f=burst]", rf)
+    attendre(pi, "AirDeFamille.iris.state().burst.status === 'done'", 90000)
+    bx = pi.evaluate("AirDeFamille.iris.state().burst")
+    tops = [t["name"] for t in bx["top"]]
+    check("Iris (AdF-069) : rafale de 5 photos → les 2 bonnes en tête, 3 proposées au plus, raisons affichées",
+          bx["total"] == 5 and set(tops[:2]) == {"rafale_bonne1.png", "rafale_bonne2.png"} and len(tops) <= 3 and "Meilleure photo" in pi.inner_text("#irisBurstList"), [bx, round(time.time() - t0, 1)])
+    run_axe(pi, "Iris, choix dans la rafale")
+    g2 = pi.evaluate("AirDeFamille.iris.state().slots[2].gen")
+    pi.click("#irisBurstList [data-pick='0']")
+    attendre(pi, f"(() => {{ const s = AirDeFamille.iris.state().slots[2]; return s.gen > {g2} && s.status === 'ready'; }})()", 40000)
+    check("Iris (AdF-069) : la photo choisie remplit l'emplacement", pi.is_hidden("#irisBurstSheet") and pi.evaluate("AirDeFamille.iris.state().slots[2].lm.auto"))
     avant = [s["has"] for s in pi.evaluate("AirDeFamille.iris.state().slots")]
     pi.click("#resetBtn")
     pi.wait_for_timeout(200)
