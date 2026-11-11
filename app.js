@@ -5798,6 +5798,14 @@
       for (const v of s.lm.ro) rmax = Math.max(rmax, v);
       const half = rmax * 1.25, k = W / (2 * half);
       g.drawImage(s.src, s.lm.cx - half, s.lm.cy - half, 2 * half, 2 * half, 0, 0, W, W);
+      g.beginPath();
+      g.rect(0, 0, W, W);
+      for (let a = 0; a <= NA; a += 2) {
+        const t = a / NA * 2 * Math.PI, r = edgeAt(s.lm.ro, t), x = (s.lm.cx + r * Math.cos(t) - (s.lm.cx - half)) * k, y = (s.lm.cy + r * Math.sin(t) - (s.lm.cy - half)) * k;
+        a ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.fillStyle = "rgba(128,128,128,.75)";
+      g.fill("evenodd");
       drawMarks(g, s.lm, (x) => (x - (s.lm.cx - half)) * k, (y) => (y - (s.lm.cy - half)) * k, k);
     }
     cv.setAttribute("role", "img");
@@ -6088,9 +6096,28 @@
       lm.ro[a] = isFinite(best) ? best : NaN;
     }
   }
+  async function fullView(s) {
+    const bm = await decodeFull(s.native.file);
+    try {
+      const W = bm.width || bm.naturalWidth, H = bm.height || bm.naturalHeight, k = Math.min(1, MAX_SIDE / Math.max(W, H)), c = makeCanvas(W * k, H * k), g = ctx2d(c);
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = "high";
+      g.drawImage(bm, 0, 0, c.width, c.height);
+      return { src: c, img: g.getImageData(0, 0, c.width, c.height), k };
+    } finally {
+      bm.close?.();
+    }
+  }
+  function toFull(lm, m, k) {
+    const q = k / m.f;
+    return { ...lm, cx: (m.ox + lm.cx / m.f) * k, cy: (m.oy + lm.cy / m.f) * k, rp: lm.rp * q, ro: Float32Array.from(lm.ro, (v) => v * q) };
+  }
   function openFix(s) {
     if (!s.src) return;
     fix.s = s;
+    fix.src = s.src;
+    fix.img = s.img;
+    fix.kFull = 0;
     fix.lm = copyLm(s.lm || s.lmSmall || defaultLandmarks(s.img));
     initContour();
     fix.errAt = 0;
@@ -6100,8 +6127,25 @@
     selectHandle("c");
     openDialog($("#irisFixSheet"), () => {
       if (fix.s === s) fix.s = null;
+      fix.src = fix.img = null;
     });
     drawFix();
+    if (s.native && s.map) {
+      const gen = s.gen, m = s.map;
+      fullView(s).then((v) => {
+        if (fix.s !== s || gen !== s.gen || fix.kFull) return;
+        const X = (x) => (m.ox + x / m.f) * v.k, Y = (y) => (m.oy + y / m.f) * v.k, q = v.k / m.f;
+        fix.lm = toFull(fix.lm, m, v.k);
+        fix.cont = fix.cont.map(([x, y]) => [X(x), Y(y)]);
+        fix.ox = X(fix.ox);
+        fix.oy = Y(fix.oy);
+        fix.half *= q;
+        fix.src = v.src;
+        fix.img = v.img;
+        fix.kFull = v.k;
+        drawFix();
+      }).catch((e) => console.warn(e));
+    }
   }
   function focusIris() {
     const c = irisCircle();
@@ -6110,13 +6154,13 @@
     fix.oy = c.cy - fix.half;
   }
   function fitAll() {
-    const { width: W, height: H } = fix.s.img;
+    const { width: W, height: H } = fix.img;
     fix.half = Math.max(W, H) / 2 * 1.02;
     fix.ox = W / 2 - fix.half;
     fix.oy = H / 2 - fix.half;
   }
   function zoomAt(f, px, py) {
-    const { width: W, height: H } = fix.s.img, nh = Math.max(12, Math.min(Math.max(W, H) * 0.6, fix.half / f)), q = nh / fix.half;
+    const { width: W, height: H } = fix.img, nh = Math.max(12, Math.min(Math.max(W, H) * 0.6, fix.half / f)), q = nh / fix.half;
     fix.ox = px - (px - fix.ox) * q;
     fix.oy = py - (py - fix.oy) * q;
     fix.half = nh;
@@ -6141,7 +6185,7 @@
     fix.k = W / (2 * fix.half);
     g.fillStyle = "#808080";
     g.fillRect(0, 0, W, W);
-    g.drawImage(fix.s.src, fix.ox, fix.oy, 2 * fix.half, 2 * fix.half, 0, 0, W, W);
+    g.drawImage(fix.src, fix.ox, fix.oy, 2 * fix.half, 2 * fix.half, 0, 0, W, W);
     const X = (x) => (x - fix.ox) * fix.k, Y = (y) => (y - fix.oy) * fix.k;
     for (const [w, col] of [[4, "rgba(0,0,0,.75)"], [2, "#fff"]]) {
       g.lineWidth = w;
@@ -6171,12 +6215,12 @@
   }
   var paintBand = debounce(() => {
     if (!fix.s) return;
-    if (!validLandmarks(fix.lm, fix.s.img.width, fix.s.img.height)) {
+    if (!validLandmarks(fix.lm, fix.img.width, fix.img.height)) {
       const cv2 = $("#irisFixBand");
       cv2.getContext("2d").clearRect(0, 0, cv2.width, cv2.height);
       return;
     }
-    const b = previewBand(fix.s.img, fix.lm, { mirror: fix.s.eye === "G" }), cv = $("#irisFixBand");
+    const b = previewBand(fix.img, fix.lm, { mirror: fix.s.eye === "G" }), cv = $("#irisFixBand");
     cv.width = b.width;
     cv.height = b.height;
     cv.getContext("2d").putImageData(new ImageData(b.data, b.width, b.height), 0, 0);
@@ -6333,12 +6377,12 @@
         $("#irisFixVals").textContent = "Le centre de la pupille est hors de l'iris : rapprochez Cp et Ci.";
         return;
       }
-      if (!validLandmarks(fix.lm, s.img.width, s.img.height)) {
+      if (!validLandmarks(fix.lm, fix.img.width, fix.img.height)) {
         fix.errAt = performance.now();
         $("#irisFixVals").textContent = "Repères incohérents : le bord de l'iris doit entourer la pupille d'au moins 20 %. Agrandissez le bord ou réduisez la pupille.";
         return;
       }
-      const dNat = irisDiameter(fix.lm) / (s.map?.f || 1);
+      const dNat = irisDiameter(fix.lm) / (fix.kFull || s.map?.f || 1);
       if (dNat < MIN_IRIS_PX) {
         fix.errAt = performance.now();
         $("#irisFixVals").textContent = `Iris trop petit (${Math.round(dNat)} px, minimum ${MIN_IRIS_PX}) : prenez la photo de plus près.`;
@@ -6351,7 +6395,8 @@
         $("#irisFixVals").textContent = "Découpe de l'iris dans la photo d'origine…";
         let done = null;
         try {
-          done = await recropNative(s, lmV, g0);
+          done = await recropNative(fix.kFull ? { native: s.native, gen: s.gen, img: fix.img, map: { ox: 0, oy: 0, f: fix.kFull } } : s, lmV, g0);
+          if (!done && fix.kFull) done = { src: fix.src, img: fix.img, map: { ox: 0, oy: 0, f: fix.kFull }, lm: lmV };
         } catch (e) {
           console.warn(e);
         } finally {
@@ -6405,7 +6450,7 @@
         }
         s.lmAuto = lm;
       }
-      fix.lm = copyLm(s.lmAuto);
+      fix.lm = copyLm(fix.kFull ? toFull(s.lmAuto, s.map, fix.kFull) : s.lmAuto);
       initContour();
       drawFix();
       $("#irisFixOk").focus();
@@ -6820,7 +6865,7 @@
     });
   }
   var irisState = () => ({
-    fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1) } : null,
+    fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull } : null,
     burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3) })) },
     slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
