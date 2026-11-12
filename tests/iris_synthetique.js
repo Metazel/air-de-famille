@@ -3,7 +3,9 @@
 // Paramètres : fond « blanc » (iris détouré) ou « oeil » (peau, blanc de l'œil, paupières) ; position et rayons ;
 // couleur ; filaments du cœur et du milieu (nombre, intensité) ; sillons du pourtour ; spirales ; cryptes ;
 // position de la collerette ; contraste cœur / pourtour ; anneau clair à la collerette ; reflet ; flou (rayon en px) ;
-// taches unies en ellipse { x, y, rx, ry, c: [r, v, b] } peintes autour de l'œil (barbe, oreille, sourcil : AdF-065).
+// taches unies en ellipse { x, y, rx, ry, c: [r, v, b] } peintes autour de l'œil (barbe, oreille, sourcil : AdF-065) ;
+// ouverture de l'œil (demi-hauteur / rayon de l'iris, 0,95 par défaut : paupières sur l'iris en dessous, AdF-072) ;
+// reflet de la pièce { x, y, w, h, a } : rectangle gris clair semi-transparent sur l'œil (AdF-073).
 function rng(seed) {
   let s = seed >>> 0 || 1;
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -11,7 +13,7 @@ function rng(seed) {
 export function irisSynthetique(o = {}) {
   const p = Object.assign(
     { w: 900, h: 700, fond: "blanc", cx: 450, cy: 350, ri: 260, rp: 70, couleur: [120, 82, 50], coeur: 18, coeurAmp: 26, milieu: 30, milieuAmp: 16,
-      sillons: 7, sillonsAmp: 0, spirales: 0, spiralesAmp: 0, cryptes: 6, collerette: 0.36, contraste: -22, anneau: 0, reflet: true, graine: 7, bruit: 4, flou: 0, taches: [] },
+      sillons: 7, sillonsAmp: 0, spirales: 0, spiralesAmp: 0, cryptes: 6, collerette: 0.36, contraste: -22, anneau: 0, reflet: true, graine: 7, bruit: 4, flou: 0, taches: [], ouverture: 0.95, piece: null },
     o
   );
   const R = rng(p.graine), d = new Uint8ClampedArray(p.w * p.h * 4);
@@ -46,7 +48,7 @@ export function irisSynthetique(o = {}) {
         c = inEye ? [232, 228, 222] : [196, 150, 128];
       }
       // Paupières (fond « oeil ») : le haut et le bas de l'iris sont couverts.
-      if (p.fond === "oeil" && r <= p.ri && (dx / (p.ri * 2.3)) ** 2 + (dy / (p.ri * 0.95)) ** 2 > 1) c = [196, 150, 128];
+      if (p.fond === "oeil" && r <= p.ri && (dx / (p.ri * 2.3)) ** 2 + (dy / (p.ri * p.ouverture)) ** 2 > 1) c = [196, 150, 128];
       d[o4] = c[0]; d[o4 + 1] = c[1]; d[o4 + 2] = c[2]; d[o4 + 3] = 255;
     }
   for (const k of p.taches)
@@ -56,6 +58,14 @@ export function irisSynthetique(o = {}) {
         const o4 = (y * p.w + x) * 4;
         d[o4] = k.c[0]; d[o4 + 1] = k.c[1]; d[o4 + 2] = k.c[2];
       }
+  if (p.piece) {
+    const k = p.piece;
+    for (let y = Math.max(0, k.y); y < Math.min(p.h, k.y + k.h); y++)
+      for (let x = Math.max(0, k.x); x < Math.min(p.w, k.x + k.w); x++) {
+        const o4 = (y * p.w + x) * 4;
+        for (let c2 = 0; c2 < 3; c2++) d[o4 + c2] = Math.round(d[o4 + c2] * (1 - k.a) + 215 * k.a);
+      }
+  }
   if (p.reflet) {
     const rx = p.cx + p.rp * 0.35, ry = p.cy - p.rp * 0.4, rr = p.rp * 0.32;
     for (let y = Math.floor(ry - rr); y <= ry + rr; y++)

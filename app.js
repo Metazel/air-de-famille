@@ -5213,7 +5213,7 @@
     const S = Math.max(64, Math.round(2 * 1.12 * rmax * s)), half = S / (2 * s);
     const N = resize(img, S, S, { x: lm.cx - half, y: lm.cy - half, w: 2 * half, h: 2 * half });
     const lmN = { cx: S / 2, cy: S / 2, rp: lm.rp * s, ro: Float32Array.from(lm.ro, (v) => v * s) };
-    const g = gray(N), local = blur(g, S, S, 8), zone = new Uint8Array(S * S);
+    const g = gray(N), local = blur(g, S, S, 8), zone = new Uint8Array(S * S), D4 = N.data;
     let spec = new Uint8Array(S * S), nIn = 0, nSp = 0;
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
@@ -5245,7 +5245,7 @@
       for (let y = 0; y < q; y++) for (let x = 0; x < q; x++) gq[y * q + x] = sample(g, S, S, Math.min(S - 1, x * 4 + 1.5), Math.min(S - 1, y * 4 + 1.5));
       const wq = blur(gq, q, q, 12), wideAt = (i) => sample(wq, q, q, Math.min(q - 1, i % S / 4), Math.min(q - 1, Math.floor(i / S) / 4));
       for (let i = 0; i < grey.length; i++) {
-        if (!zone[i] || g[i] < thr || g[i] - wideAt(i) < 15) continue;
+        if (!zone[i] || g[i] < thr || g[i] - wideAt(i) < 15 && g[i] - med < 35) continue;
         const r = N.data[i * 4], gg = N.data[i * 4 + 1], b = N.data[i * 4 + 2], mx = Math.max(r, gg, b), mnc = Math.min(r, gg, b);
         if (mx - mnc < 40) grey[i] = 1;
       }
@@ -5262,17 +5262,50 @@
           const x = p % S, a = Math.atan2((p - x) / S - lmN.cy, x - lmN.cx);
           span = Math.max(span, Math.abs(Math.atan2(Math.sin(a - mean2), Math.cos(a - mean2))));
         }
-        return span * 2 <= 90 * Math.PI / 180;
+        if (span * 2 <= 90 * Math.PI / 180) return true;
+        let r0 = Infinity, r1 = 0;
+        for (const p of comp) {
+          const x = p % S, r = Math.hypot(x - lmN.cx, (p - x) / S - lmN.cy);
+          r0 = Math.min(r0, r);
+          r1 = Math.max(r1, r);
+        }
+        return r1 - r0 >= 0.35 * (medianOf(lmN.ro) - lmN.rp);
       };
       const keepG = largeBlobs(openSquare(grey, S, S, 5), S, S, Math.max(60, 4e-3 * nIn), narrow);
       let nG = 0;
       for (let i = 0; i < keepG.length; i++) if (keepG[i] && zone[i]) nG++;
-      if (nG <= 0.12 * nIn) {
+      if (nG <= 0.3 * nIn) {
         for (let i = 0; i < spec.length; i++) if (keepG[i]) spec[i] = 1;
+      }
+      const chroma = (i) => {
+        const mx = Math.max(D4[i * 4], D4[i * 4 + 1], D4[i * 4 + 2]);
+        return (mx - Math.min(D4[i * 4], D4[i * 4 + 1], D4[i * 4 + 2])) / (mx + 20);
+      };
+      const cz = [];
+      for (let i = 0; i < zone.length; i += 7) if (zone[i]) cz.push(chroma(i));
+      const cMed = medianOf(cz);
+      if (cMed >= 0.25) {
+        const room = new Uint8Array(S * S);
+        for (let i = 0; i < room.length; i++) if (zone[i] && wideAt(i) - med >= 20 && g[i] - med >= 15 && chroma(i) < 0.6 * cMed) room[i] = 1;
+        const keepR = largeBlobs(openSquare(room, S, S, 5), S, S, Math.max(200, 0.01 * nIn));
+        let nR = 0;
+        for (let i = 0; i < keepR.length; i++) if (keepR[i] && zone[i]) nR++;
+        if (nR <= 0.4 * nIn) {
+          for (let i = 0; i < spec.length; i++) if (keepR[i]) spec[i] = 1;
+        }
       }
     }
     spec = dilateDisk(largeBlobs(spec, S, S, 12), S, S, 3);
-    return { N: inpaint(N, spec), lmN, spec, scale: s };
+    const lid = eyelids(N, lmN, S, zone);
+    let hR = 0, hL = 0;
+    for (let i = 0; i < spec.length; i++) {
+      if (zone[i]) {
+        if (lid[i]) hL++;
+        else if (spec[i]) hR++;
+      }
+      if (lid[i]) spec[i] = 1;
+    }
+    return { N: inpaint(N, spec), lmN, spec, lid, scale: s, hidden: { lid: nIn ? hL / nIn : 0, refl: nIn ? hR / nIn : 0 } };
   }
   function largeBlobs(m, w, h, minArea, keep = null) {
     const out = new Uint8Array(w * h), seen = new Uint8Array(w * h), stack = new Int32Array(w * h), comp = [];
@@ -5340,6 +5373,40 @@
         out[o + 3] = 255;
       }
     return { width: nA, height: nR, data: out };
+  }
+  function eyelids(N, lmN, S, zone) {
+    const lid = new Uint8Array(S * S), D = N.data, at = (i) => [D[i * 4], D[i * 4 + 1], D[i * 4 + 2]];
+    const med3 = (list) => [0, 1, 2].map((c) => medianOf(list.map((v) => v[c])));
+    const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const irisRef = [], skinUp = [], skinDown = [];
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const dx = x - lmN.cx, dy = y - lmN.cy, r = Math.hypot(dx, dy), t = Math.atan2(dy, dx), e = edgeAt(lmN.ro, t), i = y * S + x;
+        const lat = Math.abs(Math.cos(t)) > 0.87;
+        if (lat && r > lmN.rp * 1.3 && r < e * 0.9) irisRef.push(at(i));
+        if (r > e * 1.03 && r < e * 1.11 && Math.abs(Math.sin(t)) > 0.77) (dy < 0 ? skinUp : skinDown).push(at(i));
+      }
+    if (irisRef.length < 50) return lid;
+    const iris = med3(irisRef);
+    for (const [list, up] of [[skinUp, true], [skinDown, false]]) {
+      if (list.length < 30) continue;
+      const skin = med3(list);
+      if (dist(skin, iris) < 30) continue;
+      const cand = new Uint8Array(S * S);
+      for (let y = 0; y < S; y++)
+        for (let x = 0; x < S; x++) {
+          const i = y * S + x;
+          if (!zone[i] || y < lmN.cy !== up) continue;
+          const c = at(i), ds = dist(c, skin), di = dist(c, iris);
+          if (ds < 0.6 * di && ds < 45) cand[i] = 1;
+        }
+      const blobs = largeBlobs(cand, S, S, 40, (comp) => comp.some((p) => {
+        const x = p % S, y = (p - x) / S;
+        return Math.hypot(x - lmN.cx, y - lmN.cy) > 0.9 * edgeAt(lmN.ro, Math.atan2(y - lmN.cy, x - lmN.cx));
+      }));
+      for (let i = 0; i < lid.length; i++) if (blobs[i]) lid[i] = 1;
+    }
+    return dilateDisk(lid, S, S, 2);
   }
 
   // src/js/engine/iris/motifs.js
@@ -5703,11 +5770,7 @@
   var unpackLandmarks = (o) => o && Array.isArray(o.ro) && o.ro.length === NA ? { cx: +o.cx, cy: +o.cy, rp: +o.rp, ro: Float32Array.from(o.ro, Number), auto: !!o.auto } : null;
   function photoQuality(img, lm) {
     const nA = 360, nR = 64, sh = unwrap(img, lm, { nA, nR }), g = gray(sh), ok = new Uint8Array(nA * nR);
-    let refl2 = 0;
-    for (let i = 0; i < ok.length; i++) {
-      ok[i] = g[i] < 230 && g[i] > 8 ? 1 : 0;
-      if (g[i] >= 230) refl2++;
-    }
+    for (let i = 0; i < ok.length; i++) ok[i] = g[i] < 230 && g[i] > 8 ? 1 : 0;
     const f1 = blur(g, nR, nA, 1), f3 = blur(g, nR, nA, 3), f9 = blur(g, nR, nA, 9), rat = [];
     const x0 = Math.round(nR * 0.15), x1 = Math.round(nR * 0.85);
     for (let k = 0; k < 16; k++) {
@@ -5723,7 +5786,8 @@
         }
       if (n >= (y1 - y0) * (x1 - x0) * 0.3 && eC > 0) rat.push(Math.sqrt(eF / eC));
     }
-    return { sharp: rat.length ? medianOf(rat) : 0, reflets: refl2 / ok.length };
+    const { hidden } = normalizeIris(img, lm);
+    return { sharp: rat.length ? medianOf(rat) : 0, reflets: hidden.refl, paupieres: hidden.lid };
   }
 
   // src/js/ui/iris.js
@@ -6755,7 +6819,7 @@
   }
   var MAX_BURST = 20;
   var burst = { s: null, gen: 0, status: "idle", done: 0, total: 0, top: [], why: "" };
-  var burstKey = (c) => [c.found ? 1 : 0, c.measurable ? 1 : 0, c.found ? c.sharp * c.seen * (1 - c.reflets) : 0];
+  var burstKey = (c) => [c.found ? 1 : 0, c.measurable ? 1 : 0, c.found ? c.sharp * c.seen * Math.max(0, 1 - c.reflets - c.paupieres) : 0];
   var better = (a, b) => {
     const A = burstKey(a), B = burstKey(b);
     for (let i = 0; i < 3; i++) if (A[i] !== B[i]) return A[i] > B[i];
@@ -6791,7 +6855,7 @@
       if (burst.gen !== gen) return;
       $("#irisBurstProg").value = n / files.length;
       $("#irisBurstStep").textContent = `Photo ${n + 1} sur ${files.length}`;
-      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, measurable: false, sharp: 0, seen: 0, reflets: 0, d: 0, thumb: null };
+      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, measurable: false, sharp: 0, seen: 0, reflets: 0, paupieres: 0, d: 0, thumb: null };
       try {
         const full = await decodeFull(files[n]);
         let cv, g, k;
@@ -6842,6 +6906,7 @@
   function burstReason(c, i) {
     const net = c.sharp >= 0.5 ? "nette" : c.sharp >= SHARPNESS_MIN ? "un peu floue" : "floue";
     const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.round(c.d)} px${c.measurable ? "" : " (trop petit pour mesurer)"}`, `bord vu à ${Math.round(c.seen * 100)} %`];
+    if (c.paupieres >= 0.03) parts.push(`paupière ${Math.round(c.paupieres * 100)} %`);
     if (c.reflets >= 0.03) parts.push(`reflets ${Math.round(c.reflets * 100)} %`);
     return parts.join(" · ");
   }
@@ -6874,7 +6939,7 @@
   }
   var irisState = () => ({
     fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull } : null,
-    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3) })) },
+    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
     slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
     text: resultText()
