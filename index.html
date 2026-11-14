@@ -277,7 +277,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.7.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.8.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -398,6 +398,14 @@
     <p class="hint" id="irisFixVals" aria-live="polite"></p>
     <figure class="fixband"><canvas id="irisFixBand" width="360" height="64" aria-hidden="true"></canvas><figcaption class="hint">Aperçu du déroulé, mis à jour à chaque correction.</figcaption></figure>
     <div class="actions"><button type="button" class="btn primary" id="irisFixOk">Valider</button><button type="button" class="btn" id="irisFixAuto">Revenir au repérage automatique</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="irisEyeSheet" hidden role="dialog" aria-modal="true" aria-labelledby="irisEyeTitle">
+  <div class="sheet-in">
+    <div class="sheet-head"><h3 id="irisEyeTitle">Deux yeux sur la photo : lequel comparer ?</h3><button type="button" class="btn" data-close data-autofocus>Fermer</button></div>
+    <p class="hint">Comparez les deux zooms et choisissez l'œil le plus net, qui regarde l'objectif. Indiquez s'il s'agit de l'œil droit ou gauche de la personne : sur une photo prise de face (pas un selfie en miroir), l'œil à gauche de la photo est son œil droit.</p>
+    <div class="burstlist" id="irisEyeList"></div>
   </div>
 </div>
 

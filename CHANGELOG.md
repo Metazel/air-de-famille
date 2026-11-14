@@ -3,6 +3,17 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.8.0] — 2026-11-14
+
+- Photo avec les deux yeux (AdF-076) : l'appli repère les deux iris, montre un zoom de chacun et laisse choisir l'œil
+  à comparer en indiquant s'il s'agit de l'œil droit ou gauche ; le repérage est refait sur la zone de cet œil.
+- Repérage plus fiable (AdF-076) : l'ouverture de l'œil entière n'est plus prise pour l'iris quand un iris plus net
+  est à l'intérieur ; un iris clair (bleu) bien visible est retrouvé.
+- Reflets de fenêtre (AdF-077) : un grand reflet qui délave l'iris (couleur affaiblie par la lumière blanche) est
+  maintenant écarté des mesures, même sans contraste local ; une zone claire naturelle de l'iris, qui garde sa
+  couleur, reste mesurée (AdF-075).
+- Tests : 184 contrôles e2e publics (photo de synthèse avec deux yeux, fenêtre de choix contrôlée par axe-core).
+
 ## [v2.7.0] — 2026-11-12
 
 - Paupières (AdF-072) : la partie de l'iris couverte par la paupière est repérée (couleur de la peau prise au bord de

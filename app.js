@@ -4821,13 +4821,24 @@
     }
     const smax = Math.max(-Infinity, ...picks.map((p) => p.score));
     let c1 = { score: -Infinity, level: 0 };
-    const rank = (p) => p.level === 3 && p.score >= smax * 0.25 ? 1 : 0;
+    const holdsSharper = (p) => picks.some((q) => {
+      const d = Math.hypot(q.cx - p.cx, q.cy - p.cy);
+      return q !== p && q.score > p.score && q.r < 0.6 * p.r && d < p.r && (q.level === 3 || d > 0.2 * p.r);
+    });
+    const l3 = picks.filter((p) => p.level === 3 && p.score >= smax * 0.3 && !holdsSharper(p)).sort((a, b) => b.score - a.score);
+    let pair = null;
+    for (let i = 0; i < l3.length && !pair; i++)
+      for (let j = i + 1; j < l3.length && !pair; j++) {
+        const a = l3[i], b = l3[j], r = Math.max(a.r, b.r);
+        if (Math.abs(a.r - b.r) <= 0.35 * r && Math.abs(a.cy - b.cy) <= 1.5 * r && Math.abs(a.cx - b.cx) >= 4 * r) pair = [a, b];
+      }
+    const rank = (p) => pair ? pair.includes(p) ? 1 : 0 : l3.includes(p) ? 1 : 0;
     for (const p of picks) if (rank(p) > rank(c1) || rank(p) === rank(c1) && p.score > c1.score) c1 = p;
     if (!isFinite(c1.score)) return { ix: NaN, iy: NaN, R0: NaN, contrast: 0 };
     await yieldNow();
     const r0 = c1.r / k, cx0 = c1.cx / k, cy0 = c1.cy / k, gb = blur(g, w, h, 1.5), st = Math.max(1, 1 / k / 2);
     const fine = search(gb, w, h, range(cx0 - 2 / k, cx0 + 2 / k, st), range(cy0 - 2 / k, cy0 + 2 / k, st), radii(Math.min(r0 * 0.92, r0 - 5), Math.max(r0 * 1.08, r0 + 5)));
-    return { ix: fine.cx, iy: fine.cy, R0: fine.r, contrast: fine.score };
+    return { ix: fine.cx, iy: fine.cy, R0: fine.r, contrast: fine.score, eyes: pair ? pair.map((p) => ({ cx: p.cx / k, cy: p.cy / k, r: p.r / k })) : null };
   }
   function pupilCircle(img, ix, iy, R, wl = 1, wc = 0) {
     const { width: W, height: H, data: D } = img, s = 60 / R, S = Math.ceil(R * 1.1 * s), N = 2 * S + 1, f = new Float32Array(N * N);
@@ -5028,7 +5039,7 @@
     let wf = 0;
     for (const v of white) wf += v;
     wf /= white.length;
-    let ix, iy, R0, mode2 = "photo";
+    let ix, iy, R0, mode2 = "photo", eyes = null;
     if (wf >= 0.15) {
       const nz = white.map((v) => 1 - v), { best: best2 } = components(nz, w, h, true);
       const bw = best2.maxx - best2.minx + 1, bh = best2.maxy - best2.miny + 1, fill = best2.area / (Math.PI / 4 * bw * bh);
@@ -5049,6 +5060,7 @@
       const d = await daugman(g, cn, w, h);
       if (!isFinite(d.R0) || !(d.contrast >= 2)) return null;
       ({ ix, iy, R0 } = d);
+      eyes = d.eyes;
     }
     await yieldNow();
     onStep("Effacement des reflets");
@@ -5191,7 +5203,7 @@
     const roF = closeRing(ro, R0);
     const out = new Float32Array(NA);
     for (let a = 0; a < NA; a++) out[a] = roF[a] / k;
-    return { cx: px / k, cy: py / k, rp: rp / k, ro: out, mode: mode2, channel: best.name, seen: seen / NA, auto: true, limbus: { cx: ix / k, cy: iy / k, r: R0 / k } };
+    return { cx: px / k, cy: py / k, rp: rp / k, ro: out, mode: mode2, channel: best.name, seen: seen / NA, auto: true, limbus: { cx: ix / k, cy: iy / k, r: R0 / k }, eyes: eyes ? eyes.map((e) => ({ cx: e.cx / k, cy: e.cy / k, r: e.r / k })) : null };
   }
   var irisRadius = (lm) => medianOf(lm.ro);
   function validLandmarks(lm, W, H) {
@@ -5241,11 +5253,19 @@
       zv.sort((x, y) => x - y);
       const med = zv[zv.length >> 1], mad = Math.max(1, zv.map((v) => Math.abs(v - med)).sort((x, y) => x - y)[zv.length >> 1]);
       const thr = med + Math.max(20, 5 * mad), grey = new Uint8Array(S * S);
+      const chroma = (i) => {
+        const mx = Math.max(D4[i * 4], D4[i * 4 + 1], D4[i * 4 + 2]);
+        return (mx - Math.min(D4[i * 4], D4[i * 4 + 1], D4[i * 4 + 2])) / (mx + 20);
+      };
+      const cz = [];
+      for (let i = 0; i < zone.length; i += 7) if (zone[i]) cz.push(chroma(i));
+      const cMed = medianOf(cz);
+      const washed = (i) => chroma(i) < 0.9 * cMed && wideAt(i) - med >= 10;
       const q = Math.ceil(S / 4), gq = new Float32Array(q * q);
       for (let y = 0; y < q; y++) for (let x = 0; x < q; x++) gq[y * q + x] = sample(g, S, S, Math.min(S - 1, x * 4 + 1.5), Math.min(S - 1, y * 4 + 1.5));
       const wq = blur(gq, q, q, 12), wideAt = (i) => sample(wq, q, q, Math.min(q - 1, i % S / 4), Math.min(q - 1, Math.floor(i / S) / 4));
       for (let i = 0; i < grey.length; i++) {
-        if (!zone[i] || g[i] < thr || g[i] - wideAt(i) < 15 && !(room && g[i] - med >= 35)) continue;
+        if (!zone[i] || g[i] < thr || g[i] - wideAt(i) < 15 && !((room || washed(i)) && g[i] - med >= 35)) continue;
         const r = N.data[i * 4], gg = N.data[i * 4 + 1], b = N.data[i * 4 + 2], mx = Math.max(r, gg, b), mnc = Math.min(r, gg, b);
         if (mx - mnc < 40) grey[i] = 1;
       }
@@ -5263,7 +5283,7 @@
           span = Math.max(span, Math.abs(Math.atan2(Math.sin(a - mean2), Math.cos(a - mean2))));
         }
         if (span * 2 <= 90 * Math.PI / 180) return true;
-        if (!room) return false;
+        if (!room && comp.filter(washed).length < comp.length * 0.7) return false;
         let r0 = Infinity, r1 = 0;
         for (const p of comp) {
           const x = p % S, r = Math.hypot(x - lmN.cx, (p - x) / S - lmN.cy);
@@ -5278,13 +5298,6 @@
       if (nG <= (room ? 0.3 : 0.12) * nIn) {
         for (let i = 0; i < spec.length; i++) if (keepG[i]) spec[i] = 1;
       }
-      const chroma = (i) => {
-        const mx = Math.max(D4[i * 4], D4[i * 4 + 1], D4[i * 4 + 2]);
-        return (mx - Math.min(D4[i * 4], D4[i * 4 + 1], D4[i * 4 + 2])) / (mx + 20);
-      };
-      const cz = [];
-      for (let i = 0; i < zone.length; i += 7) if (zone[i]) cz.push(chroma(i));
-      const cMed = medianOf(cz);
       if (room && cMed >= 0.25) {
         const roomM = new Uint8Array(S * S);
         for (let i = 0; i < room.length; i++) if (zone[i] && wideAt(i) - med >= 20 && g[i] - med >= 15 && chroma(i) < 0.6 * cMed) roomM[i] = 1;
@@ -5980,7 +5993,26 @@
       console.error(e);
     }
     if (gen !== s.gen) return;
-    if (lm && s.native) {
+    let focused = false;
+    if (lm?.eyes?.length === 2 && open2 && canAutoOpen()) {
+      const pick = await chooseEye(s, lm.eyes, gen);
+      if (gen !== s.gen) return;
+      if (pick) {
+        let f = null;
+        try {
+          f = await focusEye(s, pick.eye, gen);
+        } catch (e) {
+          console.warn(e);
+        }
+        if (gen !== s.gen) return;
+        if (f) {
+          Object.assign(s, { src: f.src, img: f.img, map: f.map, cache: null, eye: pick.side });
+          lm = f.lm;
+          focused = f.native;
+        } else say3("Œil choisi non repéré : l'autre œil est gardé, corrigez les repères au besoin.");
+      }
+    } else if (lm?.eyes?.length === 2) say3("Deux yeux sur la photo : l'œil le plus net est gardé.");
+    if (lm && s.native && !focused) {
       try {
         const done = await recropNative(s, lm, gen);
         if (gen !== s.gen) return;
@@ -6118,7 +6150,7 @@
       fix.s = null;
       if (!$("#irisFixSheet").hidden) closeDialog();
     }
-    if (!$("#irisBurstSheet").hidden) closeDialog();
+    if (!$("#irisBurstSheet").hidden || !$("#irisEyeSheet").hidden) closeDialog();
     islots.forEach(clearSlot2);
   }
   var irisHasContent = () => islots.some((s) => s.src);
@@ -6817,7 +6849,66 @@
     });
     initFix();
     initBurst();
+    initEyePick();
     islots.forEach(renderSlot2);
+  }
+  var eyePick = { resolve: null };
+  function eyeThumb(s, e) {
+    const half = e.r * 2.2, t = makeCanvas(220, 220), g = ctx2d(t);
+    g.fillStyle = "#808080";
+    g.fillRect(0, 0, 220, 220);
+    g.drawImage(s.src, e.cx - half, e.cy - half, 2 * half, 2 * half, 0, 0, 220, 220);
+    return t;
+  }
+  function chooseEye(s, eyes, gen) {
+    eyePick.resolve?.(null);
+    const box = $("#irisEyeList");
+    const order = [...eyes].sort((a, b) => a.cx - b.cx);
+    box.innerHTML = order.map(
+      (e, i) => `<figure><figcaption class="hint">Œil ${i === 0 ? "à gauche" : "à droite"} de la photo</figcaption>
+      <div class="pad"><button type="button" class="btn small" data-eye="${i}" data-side="D" aria-label="Choisir : c'est l'œil droit (œil ${i === 0 ? "à gauche" : "à droite"} de la photo)">Choisir : c'est l'œil droit</button><button type="button" class="btn small" data-eye="${i}" data-side="G" aria-label="Choisir : c'est l'œil gauche (œil ${i === 0 ? "à gauche" : "à droite"} de la photo)">Choisir : c'est l'œil gauche</button></div></figure>`
+    ).join("");
+    order.forEach((e, i) => {
+      const t = eyeThumb(s, e);
+      t.setAttribute("role", "img");
+      t.setAttribute("aria-label", `Zoom sur l'œil ${i === 0 ? "à gauche" : "à droite"} de la photo`);
+      $$("figure", box)[i].prepend(t);
+    });
+    return new Promise((resolve) => {
+      eyePick.resolve = (v) => {
+        eyePick.resolve = null;
+        box.innerHTML = "";
+        resolve(gen === s.gen ? v : null);
+      };
+      eyePick.order = order;
+      openDialog($("#irisEyeSheet"), () => eyePick.resolve?.(null));
+      say3("Deux yeux sur la photo : choisissez celui à comparer.");
+    });
+  }
+  async function focusEye(s, e, gen) {
+    const approx = { cx: e.cx, cy: e.cy, rp: e.r * 0.3, ro: new Float32Array(NA).fill(e.r), auto: true };
+    let done = s.native ? await recropNative(s, approx, gen) : null;
+    if (gen !== s.gen) return null;
+    if (!done) {
+      const m = s.map || { ox: 0, oy: 0, f: 1 }, half = e.r * 2.5, out = Math.round(2 * half), c = makeCanvas(out, out), g = ctx2d(c);
+      g.fillStyle = "#808080";
+      g.fillRect(0, 0, out, out);
+      g.drawImage(s.src, e.cx - half, e.cy - half, 2 * half, 2 * half, 0, 0, out, out);
+      done = { src: c, img: g.getImageData(0, 0, out, out), map: { ox: m.ox + (e.cx - half) / m.f, oy: m.oy + (e.cy - half) / m.f, f: m.f } };
+    }
+    const native = !!(s.native && done.lm);
+    const lm = await segmentIris(done.img);
+    return gen === s.gen && lm ? { src: done.src, img: done.img, map: done.map, native, lm: { ...lm, eyes: null } } : null;
+  }
+  function initEyePick() {
+    $("#irisEyeList").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-eye]");
+      if (!b || !eyePick.resolve) return;
+      const v = { eye: eyePick.order[Number(b.dataset.eye)], side: b.dataset.side }, r = eyePick.resolve;
+      eyePick.resolve = null;
+      closeDialog();
+      r(v);
+    });
   }
   var MAX_BURST = 20;
   var burst = { s: null, gen: 0, status: "idle", done: 0, total: 0, top: [], why: "" };
