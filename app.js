@@ -5206,7 +5206,7 @@
   var RN = 400;
   var SHEET_A = 720;
   var SHEET_R = 128;
-  function normalizeIris(img, lm) {
+  function normalizeIris(img, lm, { room = false, fast = false } = {}) {
     const ri = medianOf(lm.ro), s = RN / ri;
     let rmax = 0;
     for (const v of lm.ro) rmax = Math.max(rmax, v);
@@ -5245,7 +5245,7 @@
       for (let y = 0; y < q; y++) for (let x = 0; x < q; x++) gq[y * q + x] = sample(g, S, S, Math.min(S - 1, x * 4 + 1.5), Math.min(S - 1, y * 4 + 1.5));
       const wq = blur(gq, q, q, 12), wideAt = (i) => sample(wq, q, q, Math.min(q - 1, i % S / 4), Math.min(q - 1, Math.floor(i / S) / 4));
       for (let i = 0; i < grey.length; i++) {
-        if (!zone[i] || g[i] < thr || g[i] - wideAt(i) < 15 && g[i] - med < 35) continue;
+        if (!zone[i] || g[i] < thr || g[i] - wideAt(i) < 15 && !(room && g[i] - med >= 35)) continue;
         const r = N.data[i * 4], gg = N.data[i * 4 + 1], b = N.data[i * 4 + 2], mx = Math.max(r, gg, b), mnc = Math.min(r, gg, b);
         if (mx - mnc < 40) grey[i] = 1;
       }
@@ -5263,6 +5263,7 @@
           span = Math.max(span, Math.abs(Math.atan2(Math.sin(a - mean2), Math.cos(a - mean2))));
         }
         if (span * 2 <= 90 * Math.PI / 180) return true;
+        if (!room) return false;
         let r0 = Infinity, r1 = 0;
         for (const p of comp) {
           const x = p % S, r = Math.hypot(x - lmN.cx, (p - x) / S - lmN.cy);
@@ -5274,7 +5275,7 @@
       const keepG = largeBlobs(openSquare(grey, S, S, 5), S, S, Math.max(60, 4e-3 * nIn), narrow);
       let nG = 0;
       for (let i = 0; i < keepG.length; i++) if (keepG[i] && zone[i]) nG++;
-      if (nG <= 0.3 * nIn) {
+      if (nG <= (room ? 0.3 : 0.12) * nIn) {
         for (let i = 0; i < spec.length; i++) if (keepG[i]) spec[i] = 1;
       }
       const chroma = (i) => {
@@ -5284,10 +5285,10 @@
       const cz = [];
       for (let i = 0; i < zone.length; i += 7) if (zone[i]) cz.push(chroma(i));
       const cMed = medianOf(cz);
-      if (cMed >= 0.25) {
-        const room = new Uint8Array(S * S);
-        for (let i = 0; i < room.length; i++) if (zone[i] && wideAt(i) - med >= 20 && g[i] - med >= 15 && chroma(i) < 0.6 * cMed) room[i] = 1;
-        const keepR = largeBlobs(openSquare(room, S, S, 5), S, S, Math.max(200, 0.01 * nIn));
+      if (room && cMed >= 0.25) {
+        const roomM = new Uint8Array(S * S);
+        for (let i = 0; i < room.length; i++) if (zone[i] && wideAt(i) - med >= 20 && g[i] - med >= 15 && chroma(i) < 0.6 * cMed) roomM[i] = 1;
+        const keepR = largeBlobs(openSquare(roomM, S, S, 5), S, S, Math.max(200, 0.01 * nIn));
         let nR = 0;
         for (let i = 0; i < keepR.length; i++) if (keepR[i] && zone[i]) nR++;
         if (nR <= 0.4 * nIn) {
@@ -5305,7 +5306,7 @@
       }
       if (lid[i]) spec[i] = 1;
     }
-    return { N: inpaint(N, spec), lmN, spec, lid, scale: s, hidden: { lid: nIn ? hL / nIn : 0, refl: nIn ? hR / nIn : 0 } };
+    return { N: fast ? N : inpaint(N, spec), lmN, spec, lid, scale: s, hidden: { lid: nIn ? hL / nIn : 0, refl: nIn ? hR / nIn : 0 } };
   }
   function largeBlobs(m, w, h, minArea, keep = null) {
     const out = new Uint8Array(w * h), seen = new Uint8Array(w * h), stack = new Int32Array(w * h), comp = [];
@@ -5390,8 +5391,9 @@
     const iris = med3(irisRef);
     for (const [list, up] of [[skinUp, true], [skinDown, false]]) {
       if (list.length < 30) continue;
-      const skin = med3(list);
+      const skin = med3(list), mx = Math.max(...skin);
       if (dist(skin, iris) < 30) continue;
+      if (mx > 235 || (mx - Math.min(...skin)) / (mx + 20) < 0.12) continue;
       const cand = new Uint8Array(S * S);
       for (let y = 0; y < S; y++)
         for (let x = 0; x < S; x++) {
@@ -5786,7 +5788,7 @@
         }
       if (n >= (y1 - y0) * (x1 - x0) * 0.3 && eC > 0) rat.push(Math.sqrt(eF / eC));
     }
-    const { hidden } = normalizeIris(img, lm);
+    const { hidden } = normalizeIris(img, lm, { room: true, fast: true });
     return { sharp: rat.length ? medianOf(rat) : 0, reflets: hidden.refl, paupieres: hidden.lid };
   }
 

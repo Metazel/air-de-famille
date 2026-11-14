@@ -7,7 +7,9 @@ Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
 - Paupières (AdF-072) : la partie de l'iris couverte par la paupière est repérée (couleur de la peau prise au bord de
   l'iris) et écartée des mesures ; un motif trop caché est dit « non mesurable » au lieu d'être faussé.
-- Reflets de la pièce (AdF-073) : grands reflets gris peu contrastés (fenêtre, mur clair) repérés et écartés.
+- Reflets de la pièce (AdF-073) : repérés pour le classement de la rafale (grandes taches grises, reflets très
+  peu contrastés) ; les mesures gardent la détection des reflets de la v2.6 (sur le banc privé et en relecture, des
+  zones naturellement claires ou pâles de vrais iris étaient prises pour des reflets, AdF-075).
 - Rafale : la part cachée (paupière, reflets) entre dans le classement et dans la raison affichée.
 - Conseils de prise de vue : dos à la fenêtre, et pour un enfant, regard un peu au-dessus du téléphone.
 - Tests : 182 contrôles e2e publics (iris de synthèse avec paupières et reflet de la pièce).
