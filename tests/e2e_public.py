@@ -867,17 +867,19 @@ with sync_playwright() as p:
     check("Iris (AdF-065) : photo du visage → l'œil est trouvé (pas la barbe, l'oreille ni le sourcil), pupille comprise",
           sv["status"] == "ready" and sv["lm"] and abs(sv["lm"]["ri"] - 110) / 110 < 0.08 and abs(sv["lm"]["rp"] - 40) / 40 < 0.15, sv)
     # Deux yeux sur la photo (AdF-076) : les deux zooms sont proposés, l'utilisateur choisit l'œil et dit lequel c'est.
-    f2y = iris_png2("iris_deux_yeux.png", {"fond": "oeil", "ri": 150, "rp": 45, "graine": 31}, {"fond": "oeil", "ri": 150, "rp": 45, "graine": 32})
+    f2y = iris_png2("iris_deux_yeux.png", {"fond": "oeil", "ri": 150, "rp": 45, "graine": 31, "flou": 2.5}, {"fond": "oeil", "ri": 150, "rp": 45, "graine": 32})
     g0 = pi.evaluate("AirDeFamille.iris.state().slots[1].gen")
     pi.set_input_files(".islot[data-i='1'] input[data-f=file]", f2y)
     pi.wait_for_selector("#irisEyeSheet:not([hidden])", timeout=40000)
     n2 = pi.locator("#irisEyeList figure canvas").count()
+    best2 = pi.evaluate("AirDeFamille.iris.state().eyePick.best")
+    lab2 = pi.locator("#irisEyeList figure.best figcaption").inner_text() if best2 >= 0 else ""
     run_axe(pi, "Iris, choix de l'œil")
     pi.click("#irisEyeList [data-eye='1'][data-side='G']")
     attendre(pi, f"(() => {{ const s = AirDeFamille.iris.state().slots[1]; return s.gen >= {g0} && s.status !== 'busy'; }})()", 40000)
     s2 = pi.evaluate("AirDeFamille.iris.state().slots[1]")
-    check("Iris (AdF-076) : photo avec deux yeux → deux zooms, œil choisi et indiqué (gauche), repérage refait sur cet œil",
-          n2 == 2 and s2["eye"] == "G" and s2["status"] == "ready" and s2["lm"] and abs(s2["lm"]["ri"] / s2["echelle"] - 150) / 150 < 0.1, [n2, s2])
+    check("Iris (AdF-076, AdF-078) : photo avec deux yeux → deux zooms, le plus net proposé, œil choisi et indiqué (gauche), repérage refait sur cet œil",
+          n2 == 2 and best2 == 1 and "plus net" in lab2 and s2["eye"] == "G" and s2["status"] == "ready" and s2["lm"] and abs(s2["lm"]["ri"] / s2["echelle"] - 150) / 150 < 0.1, [n2, best2, lab2, s2])
     # Grande photo (5 000 × 3 000) avec un petit iris (200 px) : jugé à pleine résolution, accepté et signalé (AdF-062).
     importer(1, fPetitGrand)
     sp = pi.evaluate("AirDeFamille.iris.state().slots[1]")

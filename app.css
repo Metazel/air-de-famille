@@ -397,3 +397,4 @@ input[type=range]{accent-color:var(--accent)}
 .burstlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0}
 .burstlist figure{margin:0;display:flex;flex-direction:column;gap:6px;align-items:stretch}
 .burstlist canvas{width:100%;height:auto;border-radius:8px;background:var(--sunk)}
+.burstlist figure.best canvas{outline:3px solid var(--accent);outline-offset:2px}

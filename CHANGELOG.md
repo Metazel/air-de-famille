@@ -7,6 +7,7 @@ Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
 - Photo avec les deux yeux (AdF-076) : l'appli repère les deux iris, montre un zoom de chacun et laisse choisir l'œil
   à comparer en indiquant s'il s'agit de l'œil droit ou gauche ; le repérage est refait sur la zone de cet œil.
+  L'œil le plus net est proposé et gardé par défaut (AdF-078).
 - Repérage plus fiable (AdF-076) : l'ouverture de l'œil entière n'est plus prise pour l'iris quand un iris plus net
   est à l'intérieur ; un iris clair (bleu) bien visible est retrouvé.
 - Reflets de fenêtre (AdF-077) : un grand reflet qui délave l'iris (couleur affaiblie par la lumière blanche) est

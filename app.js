@@ -4739,6 +4739,19 @@
       }
     return n > 8 ? Math.sqrt(Math.max(0, s2 / n - (s / n) ** 2)) : NaN;
   }
+  function eyeSharpness(g, w, h, cx, cy, r) {
+    const s = Math.max(2, Math.round(r / 12));
+    let fine = 0, coarse = 0;
+    for (let a = 0; a < 64; a++)
+      for (let t = 0; t < 12; t++) {
+        const rr = r * (0.35 + 0.55 * t / 11), x = Math.round(cx + rr * Math.cos(a * Math.PI / 32)), y = Math.round(cy + rr * Math.sin(a * Math.PI / 32));
+        if (x < s || y < s || x >= w - s || y >= h - s) continue;
+        const i = y * w + x;
+        fine += Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + w] - g[i - w]);
+        coarse += (Math.abs(g[i + s] - g[i - s]) + Math.abs(g[i + s * w] - g[i - s * w])) / s;
+      }
+    return coarse > 0 ? fine / coarse : 0;
+  }
   async function daugman(g, cn, w, h) {
     const k = 384 / Math.max(w, h), sw = Math.round(w * k), sh = Math.round(h * k);
     const small = new Float32Array(sw * sh), smallC = new Float32Array(sw * sh);
@@ -4834,11 +4847,16 @@
       }
     const rank = (p) => pair ? pair.includes(p) ? 1 : 0 : l3.includes(p) ? 1 : 0;
     for (const p of picks) if (rank(p) > rank(c1) || rank(p) === rank(c1) && p.score > c1.score) c1 = p;
+    if (pair) {
+      for (const p of pair) p.sharp = eyeSharpness(g, w, h, p.cx / k, p.cy / k, p.r / k);
+      if (pair[1].sharp > pair[0].sharp) pair.reverse();
+      c1 = pair[0];
+    }
     if (!isFinite(c1.score)) return { ix: NaN, iy: NaN, R0: NaN, contrast: 0 };
     await yieldNow();
     const r0 = c1.r / k, cx0 = c1.cx / k, cy0 = c1.cy / k, gb = blur(g, w, h, 1.5), st = Math.max(1, 1 / k / 2);
     const fine = search(gb, w, h, range(cx0 - 2 / k, cx0 + 2 / k, st), range(cy0 - 2 / k, cy0 + 2 / k, st), radii(Math.min(r0 * 0.92, r0 - 5), Math.max(r0 * 1.08, r0 + 5)));
-    return { ix: fine.cx, iy: fine.cy, R0: fine.r, contrast: fine.score, eyes: pair ? pair.map((p) => ({ cx: p.cx / k, cy: p.cy / k, r: p.r / k })) : null };
+    return { ix: fine.cx, iy: fine.cy, R0: fine.r, contrast: fine.score, eyes: pair ? pair.map((p) => ({ cx: p.cx / k, cy: p.cy / k, r: p.r / k, sharp: p.sharp })) : null };
   }
   function pupilCircle(img, ix, iy, R, wl = 1, wc = 0) {
     const { width: W, height: H, data: D } = img, s = 60 / R, S = Math.ceil(R * 1.1 * s), N = 2 * S + 1, f = new Float32Array(N * N);
@@ -5203,7 +5221,7 @@
     const roF = closeRing(ro, R0);
     const out = new Float32Array(NA);
     for (let a = 0; a < NA; a++) out[a] = roF[a] / k;
-    return { cx: px / k, cy: py / k, rp: rp / k, ro: out, mode: mode2, channel: best.name, seen: seen / NA, auto: true, limbus: { cx: ix / k, cy: iy / k, r: R0 / k }, eyes: eyes ? eyes.map((e) => ({ cx: e.cx / k, cy: e.cy / k, r: e.r / k })) : null };
+    return { cx: px / k, cy: py / k, rp: rp / k, ro: out, mode: mode2, channel: best.name, seen: seen / NA, auto: true, limbus: { cx: ix / k, cy: iy / k, r: R0 / k }, eyes: eyes ? eyes.map((e) => ({ cx: e.cx / k, cy: e.cy / k, r: e.r / k, sharp: e.sharp })) : null };
   }
   var irisRadius = (lm) => medianOf(lm.ro);
   function validLandmarks(lm, W, H) {
@@ -6864,8 +6882,9 @@
     eyePick.resolve?.(null);
     const box = $("#irisEyeList");
     const order = [...eyes].sort((a, b) => a.cx - b.cx);
+    const best = order.indexOf(eyes[0]), marked = (eyes[0].sharp || 0) > 1.1 * (eyes[1].sharp || 0);
     box.innerHTML = order.map(
-      (e, i) => `<figure><figcaption class="hint">Œil ${i === 0 ? "à gauche" : "à droite"} de la photo</figcaption>
+      (e, i) => `<figure${marked && i === best ? ' class="best"' : ""}><figcaption class="hint">Œil ${i === 0 ? "à gauche" : "à droite"} de la photo${marked && i === best ? " : le plus net (proposé)" : ""}</figcaption>
       <div class="pad"><button type="button" class="btn small" data-eye="${i}" data-side="D" aria-label="Choisir : c'est l'œil droit (œil ${i === 0 ? "à gauche" : "à droite"} de la photo)">Choisir : c'est l'œil droit</button><button type="button" class="btn small" data-eye="${i}" data-side="G" aria-label="Choisir : c'est l'œil gauche (œil ${i === 0 ? "à gauche" : "à droite"} de la photo)">Choisir : c'est l'œil gauche</button></div></figure>`
     ).join("");
     order.forEach((e, i) => {
@@ -6881,7 +6900,9 @@
         resolve(gen === s.gen ? v : null);
       };
       eyePick.order = order;
+      eyePick.best = marked ? best : -1;
       openDialog($("#irisEyeSheet"), () => eyePick.resolve?.(null));
+      if (marked) $(`[data-eye="${best}"]`, box)?.focus();
       say3("Deux yeux sur la photo : choisissez celui à comparer.");
     });
   }
@@ -7032,6 +7053,7 @@
   }
   var irisState = () => ({
     fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull } : null,
+    eyePick: { open: !!eyePick.resolve, best: eyePick.best ?? -1 },
     burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
     slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
