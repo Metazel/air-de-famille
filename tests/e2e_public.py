@@ -1022,6 +1022,18 @@ with sync_playwright() as p:
     pi.click("#irisBurstList [data-pick='0']")
     attendre(pi, f"(() => {{ const s = AirDeFamille.iris.state().slots[2]; return s.gen > {g2} && s.status === 'ready'; }})()", 40000)
     check("Iris (AdF-069) : la photo choisie remplit l'emplacement", pi.is_hidden("#irisBurstSheet") and pi.evaluate("AirDeFamille.iris.state().slots[2].lm.auto"))
+    # Paupières et reflet de la pièce (AdF-072, AdF-073) : la photo dégagée passe devant, la raison est donnée.
+    rf2 = [iris_png("rafale_paupiere.png", {"fond": "oeil", "graine": 21, "couleur": [70, 45, 30], "ouverture": 0.5}),
+           iris_png("rafale_degagee.png", {"fond": "oeil", "graine": 21, "couleur": [70, 45, 30]}),
+           iris_png("rafale_piece.png", {"fond": "oeil", "graine": 21, "couleur": [70, 45, 30], "piece": {"x": 300, "y": 180, "w": 220, "h": 140, "a": 0.35}})]
+    pi.set_input_files(".islot[data-i='2'] input[data-f=burst]", rf2)
+    attendre(pi, "AirDeFamille.iris.state().burst.status === 'done'", 90000)
+    b2 = pi.evaluate("AirDeFamille.iris.state().burst")
+    t2 = {t["name"]: t for t in b2["top"]}
+    check("Iris (AdF-072, AdF-073) : paupière et reflet de la pièce repérés ; la photo dégagée passe devant",
+          b2["top"][0]["name"] == "rafale_degagee.png" and t2.get("rafale_paupiere.png", {}).get("paupieres", 0) >= 0.1 and t2.get("rafale_piece.png", {}).get("reflets", 0) > t2["rafale_degagee.png"]["reflets"] + 0.02
+          and "paupière" in pi.inner_text("#irisBurstList"), b2)
+    pi.click("#irisBurstSheet [data-close]")
     avant = [s["has"] for s in pi.evaluate("AirDeFamille.iris.state().slots")]
     pi.click("#resetBtn")
     pi.wait_for_timeout(200)
