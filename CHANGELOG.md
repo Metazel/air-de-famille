@@ -3,6 +3,13 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.9.0] — 2026-11-15
+
+- Masquer une zone (AdF-079) : dans la correction des repères, le doigt (ou le pinceau M au clavier, flèches puis
+  Entrée) masque une paupière, un reflet ou des cils mal repérés ; la zone, relative à l'iris, est écartée des mesures
+  et sa part est annoncée. « Annuler le dernier » et « Effacer le masque ». La zone est gardée dans ma base avec les repères.
+- Tests : 186 contrôles e2e publics (masque au doigt et au clavier, axe-core en mode masque).
+
 ## [v2.8.0] — 2026-11-14
 
 - Photo avec les deux yeux (AdF-076) : l'appli repère les deux iris, montre un zoom de chacun et laisse choisir l'œil

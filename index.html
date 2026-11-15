@@ -277,7 +277,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.8.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.9.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -391,10 +391,13 @@
       <button type="button" class="hdl" data-h="p" aria-label="P, bord de la pupille">P</button>
       <button type="button" class="hdl" data-h="ic" aria-label="Ci, centre de l'iris">Ci</button>
       <button type="button" class="hdl" data-h="i" aria-label="I, bord de l'iris">I</button>
+      <button type="button" class="hdl" data-h="m" aria-label="M, pinceau du masque : Entrée pour masquer ici" hidden>M</button>
     </div>
-    <div class="seg" id="irisFixSel" role="group" aria-label="Poignée à déplacer"><button type="button" data-sel="c" aria-pressed="true">Cp : centre pupille</button><button type="button" data-sel="p" aria-pressed="false">P : bord pupille</button><button type="button" data-sel="ic" aria-pressed="false">Ci : centre iris</button><button type="button" data-sel="i" aria-pressed="false">I : bord iris</button></div>
+    <div class="seg" id="irisFixSel" role="group" aria-label="Poignée à déplacer"><button type="button" data-sel="c" aria-pressed="true">Cp : centre pupille</button><button type="button" data-sel="p" aria-pressed="false">P : bord pupille</button><button type="button" data-sel="ic" aria-pressed="false">Ci : centre iris</button><button type="button" data-sel="i" aria-pressed="false">I : bord iris</button><button type="button" data-sel="m" aria-pressed="false" hidden>M : pinceau du masque</button></div>
     <div class="pad" id="irisPadMove" role="group" aria-label="Déplacer le centre choisi"><button type="button" class="btn small" data-nudge="-1,0">← Gauche</button><button type="button" class="btn small" data-nudge="0,-1">↑ Haut</button><button type="button" class="btn small" data-nudge="0,1">↓ Bas</button><button type="button" class="btn small" data-nudge="1,0">→ Droite</button></div>
     <div class="pad" id="irisPadSize" role="group" aria-label="Taille du cercle" hidden><button type="button" class="btn small" data-size="-1">− Plus petit</button><button type="button" class="btn small" data-size="1">+ Plus grand</button></div>
+    <div class="pad" id="irisMaskPad" role="group" aria-label="Masquer une zone de l'iris"><button type="button" class="btn small" id="irisMaskMode" aria-pressed="false">Masquer une zone</button><button type="button" class="btn small" id="irisMaskUndo" hidden>Annuler le dernier</button><button type="button" class="btn small" id="irisMaskClear" hidden>Effacer le masque</button></div>
+    <p class="hint" id="irisMaskHint" hidden>Passez le doigt sur la paupière, le reflet ou les cils à écarter (en rouge) : cette zone n'entre pas dans les mesures. Deux doigts pour zoomer. Au clavier : choisissez le pinceau M, déplacez-le avec les flèches, puis Entrée. Touchez de nouveau « Masquer une zone » pour revenir aux poignées.</p>
     <p class="hint" id="irisFixVals" aria-live="polite"></p>
     <figure class="fixband"><canvas id="irisFixBand" width="360" height="64" aria-hidden="true"></canvas><figcaption class="hint">Aperçu du déroulé, mis à jour à chaque correction.</figcaption></figure>
     <div class="actions"><button type="button" class="btn primary" id="irisFixOk">Valider</button><button type="button" class="btn" id="irisFixAuto">Revenir au repérage automatique</button></div>
