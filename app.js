@@ -6017,24 +6017,23 @@
     }
     if (gen !== s.gen) return;
     let focused = false;
-    if (lm?.eyes?.length === 2 && open2 && canAutoOpen()) {
-      const pick = await chooseEye(s, lm.eyes, gen);
+    if (lm?.eyes?.length === 2) {
+      const ask = open2 && canAutoOpen(), pick = ask ? await chooseEye(s, lm.eyes, gen) : null;
       if (gen !== s.gen) return;
-      if (pick) {
-        let f = null;
-        try {
-          f = await focusEye(s, pick.eye, gen);
-        } catch (e) {
-          console.warn(e);
-        }
-        if (gen !== s.gen) return;
-        if (f) {
-          Object.assign(s, { src: f.src, img: f.img, map: f.map, cache: null, eye: pick.side });
-          lm = f.lm;
-          focused = f.native;
-        } else say3("Œil choisi non repéré : l'autre œil est gardé, corrigez les repères au besoin.");
+      if (!ask) say3("Deux yeux sur la photo : l'œil le plus net est gardé.");
+      let f = null;
+      try {
+        f = await focusEye(s, pick ? pick.eye : lm.eyes[0], gen);
+      } catch (e) {
+        console.warn(e);
       }
-    } else if (lm?.eyes?.length === 2) say3("Deux yeux sur la photo : l'œil le plus net est gardé.");
+      if (gen !== s.gen) return;
+      if (f) {
+        Object.assign(s, { src: f.src, img: f.img, map: f.map, cache: null, eye: pick ? pick.side : s.eye });
+        lm = f.lm;
+        focused = f.native;
+      } else if (pick) say3("Œil choisi non repéré : l'autre œil est gardé, corrigez les repères au besoin.");
+    }
     if (lm && s.native && !focused) {
       try {
         const done = await recropNative(s, lm, gen);
