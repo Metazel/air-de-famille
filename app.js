@@ -5334,15 +5334,22 @@
     }
     spec = dilateDisk(largeBlobs(spec, S, S, 12), S, S, 3);
     const lid = eyelids(N, lmN, S, zone);
-    let hR = 0, hL = 0;
+    const user = new Uint8Array(S * S), riN = medianOf(lmN.ro);
+    for (const [u, v, w] of lm.mask || []) {
+      const x0 = lmN.cx + u * riN, y0 = lmN.cy + v * riN, rr = w * riN;
+      for (let y = Math.max(0, Math.floor(y0 - rr)); y <= Math.min(S - 1, Math.ceil(y0 + rr)); y++)
+        for (let x = Math.max(0, Math.floor(x0 - rr)); x <= Math.min(S - 1, Math.ceil(x0 + rr)); x++) if ((x - x0) ** 2 + (y - y0) ** 2 <= rr * rr) user[y * S + x] = 1;
+    }
+    let hR = 0, hL = 0, hU = 0;
     for (let i = 0; i < spec.length; i++) {
       if (zone[i]) {
-        if (lid[i]) hL++;
+        if (user[i]) hU++;
+        else if (lid[i]) hL++;
         else if (spec[i]) hR++;
       }
-      if (lid[i]) spec[i] = 1;
+      if (lid[i] || user[i]) spec[i] = 1;
     }
-    return { N: fast ? N : inpaint(N, spec), lmN, spec, lid, scale: s, hidden: { lid: nIn ? hL / nIn : 0, refl: nIn ? hR / nIn : 0 } };
+    return { N: fast ? N : inpaint(N, spec), lmN, spec, lid, scale: s, hidden: { lid: nIn ? hL / nIn : 0, refl: nIn ? hR / nIn : 0, user: nIn ? hU / nIn : 0 } };
   }
   function largeBlobs(m, w, h, minArea, keep = null) {
     const out = new Uint8Array(w * h), seen = new Uint8Array(w * h), stack = new Int32Array(w * h), comp = [];
@@ -5792,7 +5799,7 @@
     for (const v of lm.ro) rmax = Math.max(rmax, v);
     const half = rmax * 1.06, side = 2 * half, S = Math.max(32, Math.min(maxSide, Math.round(side))), s = S / side;
     const c = resize(img, S, S, { x: lm.cx - half, y: lm.cy - half, w: side, h: side });
-    const lc = { cx: S / 2, cy: S / 2, rp: lm.rp * s, ro: Float32Array.from(lm.ro, (v) => v * s) };
+    const lc = { cx: S / 2, cy: S / 2, rp: lm.rp * s, ro: Float32Array.from(lm.ro, (v) => v * s), ...lm.mask?.length ? { mask: lm.mask.map((a) => [...a]) } : {} };
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
         const dx = x + 0.5 - lc.cx, dy = y + 0.5 - lc.cy;
@@ -5804,8 +5811,21 @@
       }
     return { img: c, lm: lc };
   }
-  var packLandmarks = (lm) => ({ cx: +lm.cx.toFixed(2), cy: +lm.cy.toFixed(2), rp: +lm.rp.toFixed(2), ro: Array.from(lm.ro, (v) => +v.toFixed(2)), auto: !!lm.auto });
-  var unpackLandmarks = (o) => o && Array.isArray(o.ro) && o.ro.length === NA ? { cx: +o.cx, cy: +o.cy, rp: +o.rp, ro: Float32Array.from(o.ro, Number), auto: !!o.auto } : null;
+  var MASK_MAX = 400;
+  var cleanMask = (m) => Array.isArray(m) ? m.slice(0, MASK_MAX).map((a) => Array.isArray(a) ? a.map(Number) : []).filter((a) => a.length === 3 && a.every(isFinite) && Math.abs(a[0]) <= 1.6 && Math.abs(a[1]) <= 1.6 && a[2] > 0 && a[2] <= 0.2) : [];
+  var packLandmarks = (lm) => {
+    const o = { cx: +lm.cx.toFixed(2), cy: +lm.cy.toFixed(2), rp: +lm.rp.toFixed(2), ro: Array.from(lm.ro, (v) => +v.toFixed(2)), auto: !!lm.auto };
+    const m = cleanMask(lm.mask);
+    if (m.length) o.mask = m.map((a) => a.map((v) => +v.toFixed(3)));
+    return o;
+  };
+  var unpackLandmarks = (o) => {
+    if (!(o && Array.isArray(o.ro) && o.ro.length === NA)) return null;
+    const lm = { cx: +o.cx, cy: +o.cy, rp: +o.rp, ro: Float32Array.from(o.ro, Number), auto: !!o.auto }, m = cleanMask(o.mask);
+    if (m.length) lm.mask = m;
+    return lm;
+  };
+  var maskedShare = (img, lm) => lm.mask?.length ? normalizeIris(img, lm, { fast: true }).hidden.user : 0;
   function photoQuality(img, lm) {
     const nA = 360, nR = 64, sh = unwrap(img, lm, { nA, nR }), g = gray(sh), ok = new Uint8Array(nA * nR);
     for (let i = 0; i < ok.length; i++) ok[i] = g[i] < 230 && g[i] > 8 ? 1 : 0;
@@ -6047,6 +6067,17 @@
       }
     }
     const secs = ((performance.now() - t0) / 1e3).toFixed(1).replace(".", ",");
+    if (lm?.approx) {
+      delete lm.approx;
+      s.status = "tofix";
+      s.lm = lm;
+      s.msg = "Œil repéré seulement à peu près : ajustez la pupille et le bord de l'iris (« Corriger les repères »), puis validez.";
+      s.warn = "1";
+      renderSlot2(s);
+      say3(`${nameOf(s)} : ${s.msg}`);
+      if (open2 && canAutoOpen()) openFix(s);
+      return;
+    }
     if (!lm) {
       s.status = "tofix";
       s.lm = defaultLandmarks(s.img);
@@ -6189,7 +6220,53 @@
     islots.forEach(renderSlot2);
   }
   var fix = { s: null, lm: null, cont: null, sel: "c", half: 0, ox: 0, oy: 0, k: 1, drag: null, pan: null, ptrs: /* @__PURE__ */ new Map(), pinch: null };
-  var copyLm = (lm) => ({ cx: lm.cx, cy: lm.cy, rp: lm.rp, ro: Float32Array.from(lm.ro), auto: lm.auto });
+  var copyLm = (lm) => ({ cx: lm.cx, cy: lm.cy, rp: lm.rp, ro: Float32Array.from(lm.ro), auto: lm.auto, ...lm.mask?.length ? { mask: lm.mask.map((a) => [...a]) } : {} });
+  var BRUSH = 0.12;
+  var MASK_MAX2 = 400;
+  var irisR = () => {
+    const v = [...fix.lm.ro].filter(isFinite).sort((a, b) => a - b);
+    return v[v.length >> 1] || 1;
+  };
+  var maskToAbs = (lm) => {
+    const v = [...lm.ro].filter(isFinite).sort((a, b) => a - b), R = v[v.length >> 1] || 1;
+    return (lm.mask || []).map(([u, w, r]) => [lm.cx + u * R, lm.cy + w * R, r * R]);
+  };
+  function maskToRel() {
+    const lm = fix.lm, R = irisR();
+    if (fix.mask.length) lm.mask = fix.mask.map(([x, y, r]) => [(x - lm.cx) / R, (y - lm.cy) / R, Math.min(0.2, r / R)]);
+    else delete lm.mask;
+  }
+  function paintAt(x, y) {
+    const lm = fix.lm, R = irisR(), m = fix.mask;
+    if (m.length >= MASK_MAX2) return fix.maskFull = true, false;
+    if (Math.hypot(x - lm.cx, y - lm.cy) > 1.15 * R) return false;
+    const last2 = m[m.length - 1];
+    if (last2 && fix.strokes.at(-1) < m.length && Math.hypot(last2[0] - x, last2[1] - y) < BRUSH * R * 0.4) return false;
+    m.push([x, y, BRUSH * R]);
+    drawFix();
+    return true;
+  }
+  function setMaskMode(on2) {
+    fix.maskOn = on2;
+    $("#irisMaskMode").setAttribute("aria-pressed", String(on2));
+    for (const id of ["#irisMaskUndo", "#irisMaskClear", "#irisMaskHint", "#irisFixSel [data-sel=m]"]) $(id).hidden = !on2;
+    if (on2) {
+      if (!fix.brush) fix.brush = [fix.lm.cx, fix.lm.cy - irisR() * 0.6];
+      selectHandle("m");
+    } else if (fix.sel === "m") selectHandle("c");
+    drawFix();
+  }
+  function maskSay() {
+    const n = fix.strokes.length;
+    $("#irisFixVals").textContent = fix.maskFull ? "Masque plein : annulez un trait ou effacez le masque pour continuer." : n ? `Zone masquée : ${n} trait${n > 1 ? "s" : ""} de pinceau.` : "Aucune zone masquée.";
+    fix.errAt = performance.now();
+  }
+  function startStroke() {
+    fix.strokes.push(fix.mask.length);
+  }
+  function endStroke() {
+    if (fix.strokes.length && fix.strokes.at(-1) >= fix.mask.length) fix.strokes.pop();
+  }
   function initContour() {
     const lm = fix.lm, pts = [];
     for (let a = 0; a < NA; a++) {
@@ -6242,9 +6319,15 @@
     fix.lm = copyLm(s.lm || s.lmSmall || defaultLandmarks(s.img));
     initContour();
     fix.errAt = 0;
+    fix.brush = null;
+    fix.paintId = null;
+    fix.mask = maskToAbs(fix.lm);
+    fix.strokes = fix.mask.length ? [0] : [];
+    fix.maskFull = false;
     focusIris();
     $("#irisFixWho").textContent = ` : ${nameOf(s)}`;
     $("#irisFixAuto").hidden = !!s.baseRef && !s.lmAuto;
+    setMaskMode(false);
     selectHandle("c");
     openDialog($("#irisFixSheet"), () => {
       if (fix.s === s) fix.s = null;
@@ -6265,6 +6348,8 @@
         fix.half *= q;
         if (fix.pan) fix.pan.ox = X(fix.pan.ox), fix.pan.oy = Y(fix.pan.oy);
         if (fix.next) fix.next = [X(fix.next[0]), Y(fix.next[1])];
+        if (fix.brush) fix.brush = [X(fix.brush[0]), Y(fix.brush[1])];
+        fix.mask = fix.mask.map(([x, y, r]) => [X(x), Y(y), r * q]);
         fix.src = v.src;
         fix.img = v.img;
         fix.kFull = v.k;
@@ -6296,13 +6381,14 @@
   function selectHandle(h) {
     fix.sel = h;
     for (const b of $$("#irisFixSel button")) b.setAttribute("aria-pressed", String(b.dataset.sel === h));
-    $("#irisPadMove").hidden = h !== "c" && h !== "ic";
-    $("#irisPadSize").hidden = h === "c" || h === "ic";
+    $("#irisPadMove").hidden = h !== "c" && h !== "ic" && h !== "m";
+    $("#irisPadSize").hidden = h === "c" || h === "ic" || h === "m";
   }
   function handlePos(h) {
     const lm = fix.lm;
     if (h === "c") return [lm.cx, lm.cy];
     if (h === "p") return [lm.cx + lm.rp, lm.cy];
+    if (h === "m") return fix.brush || [lm.cx, lm.cy];
     const c = irisCircle();
     return h === "ic" ? [c.cx, c.cy] : [c.cx - c.r, c.cy];
   }
@@ -6327,10 +6413,26 @@
       g.stroke();
     }
     g.setLineDash([]);
+    if (fix.mask?.length) {
+      g.fillStyle = "rgba(220,30,60,.45)";
+      g.beginPath();
+      for (const [x, y, r] of fix.mask) {
+        g.moveTo(X(x) + r * fix.k, Y(y));
+        g.arc(X(x), Y(y), r * fix.k, 0, 2 * Math.PI);
+      }
+      g.fill();
+    }
+    if (fix.maskOn && fix.brush) {
+      g.strokeStyle = "#fff";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(X(fix.brush[0]), Y(fix.brush[1]), BRUSH * irisR() * fix.k, 0, 2 * Math.PI);
+      g.stroke();
+    }
     for (const b of $$("#irisFixWrap .hdl")) {
       const [x, y] = handlePos(b.dataset.h), sx = X(x) / W, sy = Y(y) / W, inView = sx >= 0 && sx <= 1 && sy >= 0 && sy <= 1;
       const keep = b.dataset.h === fix.sel || document.activeElement === b, cl = (v) => Math.max(0, Math.min(1, v));
-      b.hidden = !inView && !keep;
+      b.hidden = !inView && !keep || b.dataset.h === "m" && !fix.maskOn;
       b.style.left = `${(inView ? sx : cl(sx)) * 100}%`;
       b.style.top = `${(inView ? sy : cl(sy)) * 100}%`;
       b.setAttribute("aria-pressed", String(b.dataset.h === fix.sel));
@@ -6358,6 +6460,10 @@
   }, 300);
   function applyMove(h, x, y) {
     const lm = fix.lm;
+    if (h === "m") {
+      fix.brush = [x, y];
+      return drawFix();
+    }
     if (h === "c") {
       lm.cx = x;
       lm.cy = y;
@@ -6378,7 +6484,7 @@
   }
   function nudge(h, dx, dy, big, size = null) {
     const step2 = Math.max(0.25, 2 / fix.k) * (big === true ? 10 : big === "btn" ? 4 : 1), [x, y] = handlePos(h);
-    if (h === "c" || h === "ic") return applyMove(h, x + dx * step2, y + dy * step2);
+    if (h === "c" || h === "ic" || h === "m") return applyMove(h, x + dx * step2, y + dy * step2);
     const grow = size ?? (dy < 0 ? 1 : dy > 0 ? -1 : h === "p" ? Math.sign(dx) : -Math.sign(dx));
     if (h === "p") return applyMove("p", fix.lm.cx + fix.lm.rp + grow * step2, fix.lm.cy);
     const c = irisCircle();
@@ -6403,10 +6509,21 @@
       }
       fix.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
       wrap.setPointerCapture?.(e.pointerId);
-      if (fix.ptrs.size === 1) fix.pan = { x: e.clientX, y: e.clientY, ox: fix.ox, oy: fix.oy };
+      if (fix.ptrs.size === 1 && fix.maskOn) {
+        fix.paintId = e.pointerId;
+        fix.brush = pointerToImage(e);
+        startStroke();
+        paintAt(...fix.brush);
+      } else if (fix.ptrs.size === 1) fix.pan = { x: e.clientX, y: e.clientY, ox: fix.ox, oy: fix.oy };
       else if (fix.ptrs.size === 2) {
         const [p1, p2] = [...fix.ptrs.values()];
         fix.pan = null;
+        if (fix.paintId != null) {
+          fix.mask.length = fix.strokes.at(-1) ?? fix.mask.length;
+          endStroke();
+          fix.paintId = null;
+          maskSay();
+        }
         fix.pinch = { d: Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) || 1 };
       }
     });
@@ -6423,6 +6540,11 @@
       }
       if (!fix.ptrs.has(e.pointerId)) return;
       fix.ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      if (fix.paintId === e.pointerId) {
+        fix.brush = pointerToImage(e);
+        if (!paintAt(...fix.brush)) drawFix();
+        return;
+      }
       const r = $("#irisFixCanvas").getBoundingClientRect(), sc = $("#irisFixCanvas").width / r.width / fix.k;
       if (fix.pinch && fix.ptrs.size === 2) {
         const [p1, p2] = [...fix.ptrs.values()], d = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) || 1;
@@ -6437,6 +6559,13 @@
     });
     const end = (e) => {
       if (e.pointerId === fix.dragId) fix.drag = fix.dragId = null;
+      if (e.pointerId === fix.paintId) {
+        fix.paintId = null;
+        fix.ptrs.delete(e.pointerId);
+        endStroke();
+        maskSay();
+        return;
+      }
       fix.ptrs.delete(e.pointerId);
       if (fix.ptrs.size < 2) fix.pinch = null;
       if (fix.ptrs.size === 1) {
@@ -6470,7 +6599,32 @@
     });
     wrap.addEventListener("click", (e) => {
       const b = e.target.closest(".hdl");
-      if (b) selectHandle(b.dataset.h);
+      if (!b) return;
+      selectHandle(b.dataset.h);
+      if (b.dataset.h === "m" && fix.brush) {
+        startStroke();
+        paintAt(...fix.brush);
+        endStroke();
+        maskSay();
+      }
+    });
+    $("#irisMaskMode").addEventListener("click", () => {
+      if (!fix.s) return;
+      setMaskMode(!fix.maskOn);
+      if (fix.maskOn) $("#irisFixWrap .hdl[data-h=m]").focus();
+    });
+    $("#irisMaskUndo").addEventListener("click", () => {
+      if (fix.strokes.length) fix.mask.length = fix.strokes.pop();
+      fix.maskFull = false;
+      drawFix();
+      maskSay();
+    });
+    $("#irisMaskClear").addEventListener("click", () => {
+      fix.mask = [];
+      fix.strokes = [];
+      fix.maskFull = false;
+      drawFix();
+      maskSay();
     });
     $("#irisFixSel").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-sel]");
@@ -6514,6 +6668,7 @@
         $("#irisFixVals").textContent = `Iris trop petit (${Math.round(dNat)} px, minimum ${MIN_IRIS_PX}) : prenez la photo de plus près.`;
         return;
       }
+      maskToRel();
       let lmV = copyLm(fix.lm);
       if (s.native) {
         const g0 = s.gen, seq2 = fix.seq, kF = fix.kFull, fSrc = fix.src, fImg = fix.img;
@@ -6540,7 +6695,8 @@
       s.lm = lmV;
       s.cache = null;
       s.status = "ready";
-      s.msg = (s.lm.auto ? "Repérage automatique." : "Repères corrigés à la main.") + smallNote(s.lm);
+      const share = s.lm.mask?.length ? maskedShare(s.img, s.lm) : 0;
+      s.msg = (s.lm.auto ? "Repérage automatique." : "Repères corrigés à la main.") + (share ? ` Zone masquée à la main : ${Math.round(share * 100)} % de l'iris, hors des mesures.` : "") + smallNote(s.lm);
       s.warn = "";
       s.lmSmall = null;
       s.gen++;
@@ -6911,19 +7067,23 @@
     });
   }
   async function focusEye(s, e, gen) {
-    const approx = { cx: e.cx, cy: e.cy, rp: e.r * 0.3, ro: new Float32Array(NA).fill(e.r), auto: true };
+    const approx = { cx: e.cx, cy: e.cy, rp: e.r * 0.3, ro: new Float32Array(NA).fill(e.r * 1.25), auto: true };
     let done = s.native ? await recropNative(s, approx, gen) : null;
     if (gen !== s.gen) return null;
     if (!done) {
-      const m = s.map || { ox: 0, oy: 0, f: 1 }, half = e.r * 2.5, out = Math.round(2 * half), c = makeCanvas(out, out), g = ctx2d(c);
+      const m = s.map || { ox: 0, oy: 0, f: 1 }, half = e.r * 2.5, out2 = Math.round(2 * half), c = makeCanvas(out2, out2), g = ctx2d(c);
       g.fillStyle = "#808080";
-      g.fillRect(0, 0, out, out);
-      g.drawImage(s.src, e.cx - half, e.cy - half, 2 * half, 2 * half, 0, 0, out, out);
-      done = { src: c, img: g.getImageData(0, 0, out, out), map: { ox: m.ox + (e.cx - half) / m.f, oy: m.oy + (e.cy - half) / m.f, f: m.f } };
+      g.fillRect(0, 0, out2, out2);
+      g.drawImage(s.src, e.cx - half, e.cy - half, 2 * half, 2 * half, 0, 0, out2, out2);
+      done = { src: c, img: g.getImageData(0, 0, out2, out2), map: { ox: m.ox + (e.cx - half) / m.f, oy: m.oy + (e.cy - half) / m.f, f: m.f } };
     }
     const native = !!(s.native && done.lm);
+    const ex = done.lm || { cx: e.r * 2.5, cy: e.r * 2.5 }, er = done.lm ? done.lm.ro[0] / 1.25 : e.r;
     const lm = await segmentIris(done.img);
-    return gen === s.gen && lm ? { src: done.src, img: done.img, map: done.map, native, lm: { ...lm, eyes: null } } : null;
+    if (gen !== s.gen) return null;
+    const L = lm?.limbus, ok = L && Math.hypot(L.cx - ex.cx, L.cy - ex.cy) < 0.5 * er && L.r > 0.6 * er && L.r < 1.8 * er;
+    const out = ok ? { ...lm, eyes: null } : { cx: ex.cx, cy: ex.cy, rp: er * 0.3, ro: new Float32Array(NA).fill(er), auto: true, approx: true };
+    return { src: done.src, img: done.img, map: done.map, native, lm: out };
   }
   function initEyePick() {
     $("#irisEyeList").addEventListener("click", (e) => {
@@ -7056,10 +7216,10 @@
     });
   }
   var irisState = () => ({
-    fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull } : null,
+    fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull, mask: fix.mask.length, strokes: fix.strokes.length, maskOn: !!fix.maskOn } : null,
     eyePick: { open: !!eyePick.resolve, best: eyePick.best ?? -1 },
     burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
-    slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
+    slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto, mask: s.lm.mask?.length || 0 } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
     text: resultText()
   });

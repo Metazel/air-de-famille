@@ -780,7 +780,7 @@ with sync_playwright() as p:
     noms = [pi.get_attribute(f"#irisFixWrap .hdl[data-h='{h}']", "aria-label") for h in HD]
     vis = [pi.inner_text(f"#irisFixWrap .hdl[data-h='{h}']") for h in HD]
     check("Iris (I2, AdF-068, WCAG 2.5.3) : quatre poignées nommées, nom qui commence par le texte visible", noms == ["Cp, centre de la pupille", "P, bord de la pupille", "Ci, centre de l'iris", "I, bord de l'iris"] and all(n.startswith(v) for n, v in zip(noms, vis)), [noms, vis])
-    taille = pi.evaluate("[...document.querySelectorAll('#irisFixWrap .hdl')].map(b => b.getBoundingClientRect().width)")
+    taille = pi.evaluate("[...document.querySelectorAll('#irisFixWrap .hdl:not([hidden])')].map(b => b.getBoundingClientRect().width)")
     check("Iris (R7) : poignées d'au moins 24 px", min(taille) >= 24, taille)
     pi.wait_for_timeout(450)
     v0 = pi.inner_text("#irisFixVals")
@@ -862,6 +862,32 @@ with sync_playwright() as p:
     attendre(pi, "document.querySelector('#irisFixSheet').hidden", 15000)
     lg2 = pi.evaluate("AirDeFamille.iris.state().slots[1].lm")
     check("Iris (AdF-071) : correction sur la photo entière, puis découpe à pleine résolution inchangée", fv["half"] > 1100 and lg2 and abs(lg2["ri"] - lg["ri"]) < 2, [fv, lg2])
+    # AdF-079 : « Masquer une zone » au doigt et au clavier (pinceau M), zone écartée des mesures et annoncée.
+    pi.click(".islot[data-i='1'] [data-act=fix]")
+    pi.wait_for_selector("#irisFixSheet:not([hidden])")
+    attendre(pi, "AirDeFamille.iris.state().fix?.full", 15000)
+    pi.click("#irisMaskMode")
+    mOn = pi.get_attribute("#irisMaskMode", "aria-pressed") == "true" and pi.is_visible("#irisFixWrap .hdl[data-h='m']") and pi.is_visible("#irisMaskHint")
+    run_axe(pi, "Iris, masquer une zone")
+    bb = pi.locator("#irisFixCanvas").bounding_box()
+    pi.mouse.move(bb["x"] + bb["width"] * 0.35, bb["y"] + bb["height"] * 0.33)
+    pi.mouse.down()
+    for t in range(1, 11):
+        pi.mouse.move(bb["x"] + bb["width"] * (0.35 + 0.03 * t), bb["y"] + bb["height"] * 0.33)
+    pi.mouse.up()
+    nDoigt = pi.evaluate("AirDeFamille.iris.state().fix.mask")
+    pi.focus("#irisFixWrap .hdl[data-h='m']")
+    for _ in range(12):
+        pi.keyboard.press("ArrowDown")
+    pi.keyboard.press("Enter")
+    nClav = pi.evaluate("AirDeFamille.iris.state().fix.mask")
+    pi.click("#irisMaskUndo")
+    nUndo = pi.evaluate("AirDeFamille.iris.state().fix.mask")
+    pi.click("#irisFixOk")
+    attendre(pi, "document.querySelector('#irisFixSheet').hidden", 15000)
+    sm = pi.evaluate("AirDeFamille.iris.state().slots[1]")
+    check("Iris (AdF-079) : masquer une zone au doigt et au clavier, annuler, puis zone écartée des mesures et annoncée",
+          mOn and nDoigt >= 4 and nClav == nDoigt + 1 and nUndo == nDoigt and sm["lm"]["mask"] == nDoigt and "Zone masquée à la main" in sm["msg"], [mOn, nDoigt, nClav, nUndo, sm])
     importer(1, fVisage)
     sv = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris (AdF-065) : photo du visage → l'œil est trouvé (pas la barbe, l'oreille ni le sourcil), pupille comprise",
