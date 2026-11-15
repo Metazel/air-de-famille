@@ -6067,6 +6067,17 @@
       }
     }
     const secs = ((performance.now() - t0) / 1e3).toFixed(1).replace(".", ",");
+    if (lm?.approx) {
+      delete lm.approx;
+      s.status = "tofix";
+      s.lm = lm;
+      s.msg = "Œil repéré seulement à peu près : ajustez la pupille et le bord de l'iris (« Corriger les repères »), puis validez.";
+      s.warn = "1";
+      renderSlot2(s);
+      say3(`${nameOf(s)} : ${s.msg}`);
+      if (open2 && canAutoOpen()) openFix(s);
+      return;
+    }
     if (!lm) {
       s.status = "tofix";
       s.lm = defaultLandmarks(s.img);
@@ -7056,19 +7067,23 @@
     });
   }
   async function focusEye(s, e, gen) {
-    const approx = { cx: e.cx, cy: e.cy, rp: e.r * 0.3, ro: new Float32Array(NA).fill(e.r), auto: true };
+    const approx = { cx: e.cx, cy: e.cy, rp: e.r * 0.3, ro: new Float32Array(NA).fill(e.r * 1.25), auto: true };
     let done = s.native ? await recropNative(s, approx, gen) : null;
     if (gen !== s.gen) return null;
     if (!done) {
-      const m = s.map || { ox: 0, oy: 0, f: 1 }, half = e.r * 2.5, out = Math.round(2 * half), c = makeCanvas(out, out), g = ctx2d(c);
+      const m = s.map || { ox: 0, oy: 0, f: 1 }, half = e.r * 2.5, out2 = Math.round(2 * half), c = makeCanvas(out2, out2), g = ctx2d(c);
       g.fillStyle = "#808080";
-      g.fillRect(0, 0, out, out);
-      g.drawImage(s.src, e.cx - half, e.cy - half, 2 * half, 2 * half, 0, 0, out, out);
-      done = { src: c, img: g.getImageData(0, 0, out, out), map: { ox: m.ox + (e.cx - half) / m.f, oy: m.oy + (e.cy - half) / m.f, f: m.f } };
+      g.fillRect(0, 0, out2, out2);
+      g.drawImage(s.src, e.cx - half, e.cy - half, 2 * half, 2 * half, 0, 0, out2, out2);
+      done = { src: c, img: g.getImageData(0, 0, out2, out2), map: { ox: m.ox + (e.cx - half) / m.f, oy: m.oy + (e.cy - half) / m.f, f: m.f } };
     }
     const native = !!(s.native && done.lm);
+    const ex = done.lm || { cx: e.r * 2.5, cy: e.r * 2.5 }, er = done.lm ? done.lm.ro[0] / 1.25 : e.r;
     const lm = await segmentIris(done.img);
-    return gen === s.gen && lm ? { src: done.src, img: done.img, map: done.map, native, lm: { ...lm, eyes: null } } : null;
+    if (gen !== s.gen) return null;
+    const L = lm?.limbus, ok = L && Math.hypot(L.cx - ex.cx, L.cy - ex.cy) < 0.5 * er && L.r > 0.6 * er && L.r < 1.8 * er;
+    const out = ok ? { ...lm, eyes: null } : { cx: ex.cx, cy: ex.cy, rp: er * 0.3, ro: new Float32Array(NA).fill(er), auto: true, approx: true };
+    return { src: done.src, img: done.img, map: done.map, native, lm: out };
   }
   function initEyePick() {
     $("#irisEyeList").addEventListener("click", (e) => {

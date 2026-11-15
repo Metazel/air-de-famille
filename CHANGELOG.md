@@ -8,6 +8,8 @@ Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 - Masquer une zone (AdF-079) : dans la correction des repères, le doigt (ou le pinceau M au clavier, flèches puis
   Entrée) masque une paupière, un reflet ou des cils mal repérés ; la zone, relative à l'iris, est écartée des mesures
   et sa part est annoncée. « Annuler le dernier » et « Effacer le masque ». La zone est gardée dans ma base avec les repères.
+- Deux yeux (AdF-078) : l'œil choisi est repéré sur une zone plus large ; si le repérage ne le retrouve pas, son cercle
+  approximatif est proposé à corriger (au lieu de garder l'autre œil ou un cercle faux).
 - Tests : 186 contrôles e2e publics (masque au doigt et au clavier, axe-core en mode masque).
 
 ## [v2.8.0] — 2026-11-14
