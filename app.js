@@ -4938,8 +4938,11 @@
             if (sc > best.sc) best = { sc, cx, cy, r };
           }
       const zi = zone(best, 0.2, 0.8), zo = zone(best, 1.2, 1.6);
-      if (!(best.sc >= 4) || !zi || !zo || !(zi.m < zo.m - 6) || !(zi.sd < Math.max(4, 1.2 * zo.sd))) continue;
+      if (!(best.sc >= 4) || !zi || !zo || !(zi.m < zo.m - 6)) continue;
+      const tol = Math.max(4, 1.2 * zo.sd, 0.35 * (zo.m - zi.m));
+      if (!(zi.sd < tol)) continue;
       let worst = 0;
+      const ringM = [];
       for (const q of [0.3, 0.5, 0.65]) {
         const v = [];
         for (const [cs, sn] of ANG) {
@@ -4948,10 +4951,12 @@
         }
         if (v.length >= 8) {
           const m = medianOf(v);
+          ringM.push(m);
           worst = Math.max(worst, medianOf(v.map((u) => Math.abs(u - m))));
         }
       }
-      if (!(worst < Math.max(4, 1.2 * zo.sd))) continue;
+      if (!(worst < tol)) continue;
+      if (ringM.length >= 2 && !(Math.abs(ringM[0] - ringM[ringM.length - 1]) < Math.max(4, 1.2 * zo.sd, 0.2 * (zo.m - zi.m)))) continue;
       const out = { cx: ix + (best.cx - S) / s, cy: iy + (best.cy - S) / s, r: best.r / s, sc: best.sc, scN: best.sc / spread };
       return refinePupil(img, out, wl, wc, thr) || out;
     }
@@ -6885,7 +6890,7 @@
     const best = order.indexOf(eyes[0]), marked = (eyes[0].sharp || 0) > 1.1 * (eyes[1].sharp || 0);
     box.innerHTML = order.map(
       (e, i) => `<figure${marked && i === best ? ' class="best"' : ""}><figcaption class="hint">Œil ${i === 0 ? "à gauche" : "à droite"} de la photo${marked && i === best ? " : le plus net (proposé)" : ""}</figcaption>
-      <div class="pad"><button type="button" class="btn small" data-eye="${i}" data-side="D" aria-label="Choisir : c'est l'œil droit (œil ${i === 0 ? "à gauche" : "à droite"} de la photo)">Choisir : c'est l'œil droit</button><button type="button" class="btn small" data-eye="${i}" data-side="G" aria-label="Choisir : c'est l'œil gauche (œil ${i === 0 ? "à gauche" : "à droite"} de la photo)">Choisir : c'est l'œil gauche</button></div></figure>`
+      <div class="pad"><button type="button" class="btn small" data-eye="${i}" data-side="D" aria-label="Choisir : c'est l'œil droit (œil ${i === 0 ? "à gauche" : "à droite"} de la photo${marked && i === best ? ", le plus net, proposé" : ""})">Choisir : c'est l'œil droit</button><button type="button" class="btn small" data-eye="${i}" data-side="G" aria-label="Choisir : c'est l'œil gauche (œil ${i === 0 ? "à gauche" : "à droite"} de la photo${marked && i === best ? ", le plus net, proposé" : ""})">Choisir : c'est l'œil gauche</button></div></figure>`
     ).join("");
     order.forEach((e, i) => {
       const t = eyeThumb(s, e);
