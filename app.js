@@ -5777,7 +5777,7 @@
       const F = {}, why = {};
       for (const k of ["filaments_coeur", "filaments_milieu", "sillons_bord", "cryptes_densite", "collerette", "clarte_coeur_bord", "spirales_bord"]) {
         F[k] = null;
-        why[k] = `iris trop petit pour mesurer les motifs (${Math.round(d)} px de diamètre, minimum ${MIN_MEASURE_PX})`;
+        why[k] = `iris trop petit pour mesurer les motifs (${Math.floor(d)} px de diamètre, minimum ${MIN_MEASURE_PX})`;
       }
       onStep("Déroulé de l'iris");
       return { F, why, extra: {}, band: bandImage(unwrap(img, lm, { mirror })) };
@@ -5795,7 +5795,7 @@
       for (const k of FINE)
         if (k in m.F) {
           m.F[k] = null;
-          m.why[k] = `motif fin, iris trop petit (${Math.round(d)} px de diamètre, minimum ${MIN_FULL_PX})`;
+          m.why[k] = `motif fin, iris trop petit (${Math.floor(d)} px de diamètre, minimum ${MIN_FULL_PX})`;
         }
     }
     return { ...m, band: bandImage(sheet) };
@@ -6141,11 +6141,11 @@
   }
   var frac = (v) => String(v).replace(".", ",");
   var smallNote = (lm) => {
-    const d = Math.round(irisDiameter(lm));
+    const d = irisDiameter(lm), shown = Math.floor(d);
     if (d >= MIN_FULL_PX) return "";
-    const pct = Math.max(5, Math.round(100 * d / MIN_FULL_PX / 5) * 5), z = Math.ceil(MIN_FULL_PX / d * 2) / 2;
-    const how = ` Pour tout mesurer : rapprochez-vous à environ ${pct} % de la distance actuelle, ou zoom ×${frac(z)}.`;
-    return d < MIN_MEASURE_PX ? ` Iris de ${d} px : motifs non mesurés (il faut ${MIN_MEASURE_PX} px, ${MIN_FULL_PX} pour les 7), comparaison à l'œil seulement.${how}` : ` Iris de ${d} px : 5 motifs sur 7 mesurés ; filaments du cœur et collerette à partir de ${MIN_FULL_PX} px.${how}`;
+    const pct = Math.max(5, Math.floor(100 * d / MIN_FULL_PX / 5) * 5), z = Math.ceil(MIN_FULL_PX / d * 2) / 2;
+    const how = ` Pour tout mesurer : rapprochez-vous à environ ${pct} % de la distance actuelle, ou zoomez ${frac(z)} fois plus.`;
+    return d < MIN_MEASURE_PX ? ` Iris de ${shown} px : motifs non mesurés (il faut ${MIN_MEASURE_PX} px, ${MIN_FULL_PX} pour les 7), comparaison à l'œil seulement.${how}` : ` Iris de ${shown} px : 5 motifs sur 7 mesurés ; filaments du cœur et collerette à partir de ${MIN_FULL_PX} px.${how}`;
   };
   var canAutoOpen = () => !dialogOpen() && !$("#iris").hidden;
   function defaultLandmarks(img) {
@@ -6805,7 +6805,7 @@
   var sideLine = (t, A, B) => t.side == null ? "Non mesurable" : t.side === "egalite" ? `Égalité entre ${A} et ${B}` : `Plus proche de : ${t.side === "a" ? A : B}`;
   var nm2 = (r) => nameOf(r.s);
   function bandDesc(r) {
-    const parts = MOTIFS.map((m) => `${m.label.toLowerCase()} : ${r.F[m.key] == null ? `non mesurable (${r.why[m.key]})` : describe2(m.key, r.F[m.key])}`);
+    const parts = MOTIFS.map((m) => `${m.label.toLowerCase()} : ${cellText(r, m)}`);
     return `Iris de ${nm2(r)}, ${EYE[r.eye]}, déroulé de la pupille (en haut) au bord (en bas), sur un tour complet en partant du côté du nez. ${parts.join(" ; ")}.`;
   }
   function drawBand(cv, r) {
@@ -6839,7 +6839,7 @@
     for (const cv of $$("canvas", box)) drawBand(cv, R[cv.dataset.k]);
     const small = R.filter(tooSmall);
     $("#irisSmallWarn").hidden = !small.length;
-    $("#irisSmallWarn").textContent = small.length ? `${small.map((r) => `Iris de ${nm2(r)} : ${Math.round(irisDiameter(r.s.lm))} px de diamètre`).join(" ; ")}. Motifs mesurés à partir de ${MIN_MEASURE_PX} px, filaments du cœur et collerette à partir de ${MIN_FULL_PX} px : pour tout mesurer, importez une photo plus rapprochée ou prise au zoom.` : "";
+    $("#irisSmallWarn").textContent = small.length ? `${small.map((r) => `Iris de ${nm2(r)} : ${Math.floor(irisDiameter(r.s.lm))} px de diamètre`).join(" ; ")}. Motifs mesurés à partir de ${MIN_MEASURE_PX} px, filaments du cœur et collerette à partir de ${MIN_FULL_PX} px : pour tout mesurer, importez une photo plus rapprochée ou prise au zoom.` : "";
     const eyes = new Set(R.map((r) => r.eye));
     $("#irisEyeWarn").hidden = eyes.size < 2;
     const trioMode = R.length === 3 && R[0].s.i === 0;
@@ -7199,7 +7199,7 @@
   }
   function burstReason(c, i) {
     const net = c.sharp >= 0.5 ? "nette" : c.sharp >= SHARPNESS_MIN ? "un peu floue" : "floue";
-    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.round(c.d)} px${!c.measurable ? " (trop petit pour mesurer)" : c.d < MIN_FULL_PX ? " (5 motifs sur 7)" : ""}`, `bord vu à ${Math.round(c.seen * 100)} %`];
+    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.floor(c.d)} px${!c.measurable ? " (trop petit pour mesurer)" : c.d < MIN_FULL_PX ? " (5 motifs sur 7)" : ""}`, `bord vu à ${Math.round(c.seen * 100)} %`];
     if (c.paupieres >= 0.03) parts.push(`paupière ${Math.round(c.paupieres * 100)} %`);
     if (c.reflets >= 0.03) parts.push(`reflets ${Math.round(c.reflets * 100)} %`);
     return parts.join(" · ");

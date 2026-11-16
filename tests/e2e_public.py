@@ -910,7 +910,7 @@ with sync_playwright() as p:
     importer(1, fPetitGrand)
     sp = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris (AdF-062, AdF-080) : grande photo, petit iris → taille jugée à pleine résolution (rayon 100 px), taille et rapprochement annoncés",
-          sp["status"] == "ready" and sp["lm"] and abs(sp["lm"]["ri"] - 100) / 100 < 0.05 and "Iris de 2" in sp["msg"] and "Pour tout mesurer" in sp["msg"] and "zoom ×" in sp["msg"], sp)
+          sp["status"] == "ready" and sp["lm"] and abs(sp["lm"]["ri"] - 100) / 100 < 0.05 and "Iris de 2" in sp["msg"] and "Pour tout mesurer" in sp["msg"] and "fois plus" in sp["msg"], sp)
     # Chemin manuel sur une grande photo : à la validation, l'iris est redécoupé à pleine résolution (AdF-061).
     importer(1, fGrisGrand, "s.status === 'tofix'")
     ech0 = pi.evaluate("AirDeFamille.iris.state().slots[1].echelle")
