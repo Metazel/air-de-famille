@@ -3,6 +3,14 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.10.0] — 2026-11-16
+
+- Taille de l'iris (AdF-080) : seuil de mesure fixé par un banc (18 iris réduits à 300, 250, 200 et 150 px). Dès
+  200 px de diamètre, 5 motifs sur 7 sont mesurés ; filaments du cœur et collerette, plus fins, à partir de 300 px.
+- Taille annoncée dès l'import, avec de combien se rapprocher ou quel zoom utiliser ; rafale classée en conséquence.
+- Tests : 186 contrôles e2e publics.
+- Conseils de prise mis à jour (zoom ×2 ou ×3 de l'appareil, taille utile, inutile de recadrer).
+
 ## [v2.9.0] — 2026-11-15
 
 - Masquer une zone (AdF-079) : dans la correction des repères, le doigt (ou le pinceau M au clavier, flèches puis
