@@ -909,8 +909,8 @@ with sync_playwright() as p:
     # Grande photo (5 000 × 3 000) avec un petit iris (200 px) : jugé à pleine résolution, accepté et signalé (AdF-062).
     importer(1, fPetitGrand)
     sp = pi.evaluate("AirDeFamille.iris.state().slots[1]")
-    check("Iris (AdF-062) : grande photo, petit iris → taille jugée à pleine résolution (rayon 100 px), comparaison à l'œil annoncée",
-          sp["status"] == "ready" and sp["lm"] and abs(sp["lm"]["ri"] - 100) / 100 < 0.05 and "moins de 300" in sp["msg"], sp)
+    check("Iris (AdF-062, AdF-080) : grande photo, petit iris → taille jugée à pleine résolution (rayon 100 px), taille et rapprochement annoncés",
+          sp["status"] == "ready" and sp["lm"] and abs(sp["lm"]["ri"] - 100) / 100 < 0.05 and "Iris de 2" in sp["msg"] and "Pour tout mesurer" in sp["msg"] and "fois plus" in sp["msg"], sp)
     # Chemin manuel sur une grande photo : à la validation, l'iris est redécoupé à pleine résolution (AdF-061).
     importer(1, fGrisGrand, "s.status === 'tofix'")
     ech0 = pi.evaluate("AirDeFamille.iris.state().slots[1].echelle")
@@ -953,8 +953,10 @@ with sync_playwright() as p:
     importer(1, fMoyen, "s.status === 'ready'")
     pi.click("#irisGo")
     attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
-    check("Iris (AdF-058) : iris de moins de 300 px → un seul avertissement, fiches « non mesuré (iris trop petit) »",
-          pi.is_visible("#irisSmallWarn") and "300" in pi.inner_text("#irisSmallWarn") and "non mesuré (iris trop petit)" in pi.inner_text("#irisTable") and "minimum 300" not in pi.inner_text("#irisTable"), pi.inner_text("#irisSmallWarn"))
+    Fm = pi.evaluate("AirDeFamille.iris.state().results[1].F")
+    check("Iris (AdF-058, AdF-080) : iris de 220 px → 5 motifs mesurés, filaments du cœur et collerette « non mesuré (iris trop petit) », un seul avertissement",
+          pi.is_visible("#irisSmallWarn") and "300" in pi.inner_text("#irisSmallWarn") and "non mesuré (iris trop petit)" in pi.inner_text("#irisTable") and "minimum 300" not in pi.inner_text("#irisTable")
+          and Fm["filaments_coeur"] is None and Fm["collerette"] is None and Fm["filaments_milieu"] is not None and Fm["cryptes_densite"] is not None, [pi.inner_text("#irisSmallWarn"), Fm])
     importer(1, fBruit, "s.status === 'ready'")
     pi.click("#irisGo")
     attendre(pi, "!!AirDeFamille.iris.state().results", 60000)
