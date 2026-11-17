@@ -888,6 +888,38 @@ with sync_playwright() as p:
     sm = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris (AdF-079) : masquer une zone au doigt et au clavier, annuler, puis zone écartée des mesures et annoncée",
           mOn and nDoigt >= 4 and nClav == nDoigt + 1 and nUndo == nDoigt and sm["lm"]["mask"] == nDoigt and "Zone masquée à la main" in sm["msg"], [mOn, nDoigt, nClav, nUndo, sm])
+    # AdF-081 : prise de l'œil guidée (caméra simulée par une image de synthèse) : taille estimée, rafale automatique,
+    # tri du lot A ; iris entre 200 et 300 px : mode réduit annoncé puis rafale ; caméra refusée : choix de photos.
+    def camera_oeil(ri, refus=False):
+        pi.evaluate("""([ri, refus]) => { const im = irisSynthetique({ w: 1600, h: 1200, cx: 800, cy: 600, ri, rp: ri * 0.3, fond: 'oeil', graine: 9, coeur: 30, spirales: 30 });
+          const c = document.createElement('canvas'); c.width = 1600; c.height = 1200; const g = c.getContext('2d'), id = new ImageData(im.data, 1600, 1200);
+          g.putImageData(id, 0, 0); clearInterval(window.__eyeTimer); window.__eyeTimer = setInterval(() => g.putImageData(id, 0, 0), 100);
+          navigator.mediaDevices.getUserMedia = refus ? () => Promise.reject(new DOMException('refus', 'NotAllowedError')) : async () => c.captureStream(10);
+          navigator.mediaDevices.enumerateDevices = async () => [{ kind: 'videoinput', deviceId: 'a' }]; }""", [ri, refus])
+        pi.click(".islot[data-i='1'] [data-act=eyecam]")
+        pi.wait_for_selector("#eyeCamSheet:not([hidden])")
+        pi.check("#eyeCamConsent")
+        pi.click("#eyeCamGo")
+    camera_oeil(200)
+    attendre(pi, "AirDeFamille.eyeCamState().est > 0", 15000)
+    run_axe(pi, "Iris, photographier l'œil")
+    e1 = pi.evaluate("AirDeFamille.eyeCamState()")
+    attendre(pi, "!document.querySelector('#irisBurstSheet').hidden", 30000)
+    attendre(pi, "AirDeFamille.iris.state().burst.status !== 'busy'", 60000)
+    b1 = pi.evaluate("AirDeFamille.iris.state().burst")
+    pi.click("#irisBurstSheet [data-close]")
+    camera_oeil(120)
+    attendre(pi, "!document.querySelector('#irisBurstSheet').hidden", 40000)
+    e2 = pi.evaluate("AirDeFamille.eyeCamState()")
+    attendre(pi, "AirDeFamille.iris.state().burst.status !== 'busy'", 60000)
+    pi.click("#irisBurstSheet [data-close]")
+    camera_oeil(200, refus=True)
+    pi.wait_for_selector("#eyeCamNoCam:not([hidden])", timeout=15000)
+    nocam = pi.is_visible("#eyeCamFile2") and not pi.evaluate("AirDeFamille.eyeCamState().open")
+    pi.click("#eyeCamSheet [data-close]")
+    pi.evaluate("clearInterval(window.__eyeTimer)")
+    check("Iris (AdF-081) : prise guidée → taille estimée (400 px), rafale de 5 triée ; 240 px → mode réduit (objectif 200) puis rafale ; caméra refusée → choix de photos",
+          abs(e1["est"] - 400) < 40 and e1["goal"] == 300 and b1["total"] == 5 and len(b1["top"]) == 3 and b1["top"][0]["measurable"] and e2["goal"] == 200 and nocam, [e1, b1["total"], e2, nocam])
     importer(1, fVisage)
     sv = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris (AdF-065) : photo du visage → l'œil est trouvé (pas la barbe, l'oreille ni le sourcil), pupille comprise",

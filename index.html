@@ -277,7 +277,7 @@
 
   </main>
 
-  <footer><span>Air de famille · v2.10.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
+  <footer><span>Air de famille · v2.11.0</span><button class="btn small" id="resetBtn" type="button" hidden>Tout effacer</button><button class="linkbtn" id="privacyBtn" type="button">Confidentialité et mentions</button><span>Analyse locale · aucune donnée transmise</span></footer>
 </div>
 
 <div class="sheet" id="faceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -306,6 +306,32 @@
     <div class="masklist" id="maskList"></div>
     <p class="hint">Lunettes : si possible, reprenez la photo sans elles. Si vous les gardez, les yeux ne sont pas notés, car les verres changent leur taille apparente. Barbe et cheveux ne s'enlèvent pas : ils sont simplement pris en compte.</p>
     <div class="actions"><button type="button" class="btn primary" id="maskGo" data-autofocus>Appliquer</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="eyeCamSheet" hidden role="dialog" aria-modal="true" aria-labelledby="eyeCamTitle">
+  <div class="sheet-in cam">
+    <div class="sheet-head"><h3 id="eyeCamTitle">Photographier l'œil<span id="eyeCamWho"></span></h3><button type="button" class="btn" data-close>Fermer</button></div>
+    <div id="eyeCamIntro">
+      <p class="hint">Un proche tient le téléphone, caméra arrière, à 15-30 cm de l'œil ; lumière du jour de côté, sans flash ; la personne regarde l'objectif, ou un point juste au-dessus pour un enfant. L'appli indique quand s'approcher et prend une rafale toute seule ; le bouton « Prendre la rafale » reste disponible. Rien n'est enregistré ni envoyé : les photos restent en mémoire, les 3 meilleures sont proposées, les autres effacées.</p>
+      <label class="check"><input type="checkbox" id="eyeCamConsent" data-autofocus> La personne photographiée est d'accord (pour un enfant : ses parents).</label>
+      <div class="actions"><button type="button" class="btn primary" id="eyeCamGo" disabled>Démarrer la caméra</button><button type="button" class="btn" id="eyeCamFile">Choisir des photos à la place</button></div>
+    </div>
+    <div id="eyeCamLive" hidden>
+      <div class="camview"><video id="eyeCamVideo" playsinline muted aria-hidden="true"></video><div class="eyering" id="eyeCamRing" aria-hidden="true"></div></div>
+      <p class="camtext" id="eyeCamText" tabindex="-1"></p>
+      <p class="hint" id="eyeCamSize"></p>
+      <div class="sr-only" id="eyeCamSay" role="status" aria-live="polite"></div>
+      <div class="camnocam" id="eyeCamNoCam" hidden><p>Caméra indisponible ou refusée.</p><button type="button" class="btn" id="eyeCamFile2">Choisir des photos</button></div>
+      <div class="camnocam" id="eyeCamPaused" hidden><p>Caméra arrêtée pendant que l'application était en arrière-plan.</p><button type="button" class="btn primary" id="eyeCamResume">Reprendre la caméra</button></div>
+      <div class="camctl">
+        <button type="button" class="btn primary" id="eyeCamShot" disabled>Prendre la rafale</button>
+        <button type="button" class="btn small" id="eyeCamZoomOut" hidden>Zoom −</button>
+        <button type="button" class="btn small" id="eyeCamZoomIn" hidden>Zoom +</button>
+        <span class="hint" id="eyeCamZoomState" aria-live="polite"></span>
+        <button type="button" class="btn small" id="eyeCamVoice" aria-pressed="true">Voix</button>
+      </div>
+    </div>
   </div>
 </div>
 
