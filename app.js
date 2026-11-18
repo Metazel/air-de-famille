@@ -5596,6 +5596,12 @@
     if (m.length) lm.mask = m;
     return lm;
   };
+  var contourIrregular = (lm) => {
+    const v = Array.from(lm.ro).filter(isFinite).sort((a, b) => a - b);
+    if (v.length < 8) return true;
+    const m = v[v.length >> 1];
+    return v[v.length - 1] / m > 1.35 || v[0] / m < 0.7;
+  };
   var maskedShare = (img, lm) => lm.mask?.length ? normalizeIris(img, lm, { fast: true }).hidden.user : 0;
   function photoQuality(img, lm) {
     const nA = 360, nR = 64, sh = unwrap(img, lm, { nA, nR }), g = gray(sh), ok = new Uint8Array(nA * nR);
@@ -6449,6 +6455,17 @@
       s.msg = `Iris trop petit (${Math.round(d)} px de diamètre, minimum ${MIN_IRIS_PX}) : prenez la photo de plus près, ou corrigez les repères si le bord est mal placé.`;
       s.warn = "1";
       renderSlot2(s);
+      return;
+    }
+    if (lm.auto && contourIrregular(lm)) {
+      s.status = "tofix";
+      s.lm = lm;
+      s.lmAuto = lm;
+      s.msg = "Contour de l'iris très irrégulier (paupière ou reflet pris pour le bord ?) : vérifiez les repères, masquez la paupière au besoin (« Masquer une zone »), puis validez." + smallNote(lm);
+      s.warn = "1";
+      renderSlot2(s);
+      say4(`${nameOf(s)} : contour de l'iris irrégulier, repères à vérifier.`);
+      if (open2 && canAutoOpen()) openFix(s);
       return;
     }
     s.lm = lm;
@@ -7467,10 +7484,10 @@
   }
   var MAX_BURST = 20;
   var burst = { s: null, gen: 0, status: "idle", done: 0, total: 0, top: [], why: "" };
-  var burstKey = (c) => [c.found ? 1 : 0, c.measurable ? 1 : 0, c.d >= MIN_FULL_PX ? 1 : 0, c.found ? c.sharp * c.seen * Math.max(0, 1 - c.reflets - c.paupieres) : 0];
+  var burstKey = (c) => [c.found ? 1 : 0, c.regular ? 1 : 0, c.measurable ? 1 : 0, c.d >= MIN_FULL_PX ? 1 : 0, c.found ? c.sharp * c.seen * Math.max(0, 1 - c.reflets - c.paupieres) : 0];
   var better = (a, b) => {
     const A = burstKey(a), B = burstKey(b);
-    for (let i = 0; i < 4; i++) if (A[i] !== B[i]) return A[i] > B[i];
+    for (let i = 0; i < 5; i++) if (A[i] !== B[i]) return A[i] > B[i];
     return false;
   };
   function stopBurst() {
@@ -7503,7 +7520,7 @@
       if (burst.gen !== gen) return;
       $("#irisBurstProg").value = n / files.length;
       $("#irisBurstStep").textContent = `Photo ${n + 1} sur ${files.length}`;
-      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, measurable: false, sharp: 0, seen: 0, reflets: 0, paupieres: 0, d: 0, thumb: null };
+      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, regular: false, measurable: false, sharp: 0, seen: 0, reflets: 0, paupieres: 0, d: 0, thumb: null };
       try {
         const full = await decodeFull(files[n]);
         let cv, g, k;
@@ -7524,6 +7541,7 @@
           c.found = true;
           c.d = irisDiameter(lm) / k;
           c.measurable = c.d >= MIN_MEASURE_PX;
+          c.regular = !contourIrregular(lm);
           c.seen = lm.seen ?? 1;
           Object.assign(c, photoQuality(img, lm));
           const half = irisDiameter(lm) / 2 * 1.3, t = makeCanvas(160, 160);
@@ -7553,7 +7571,7 @@
   }
   function burstReason(c, i) {
     const net = c.sharp >= 0.5 ? "nette" : c.sharp >= SHARPNESS_MIN ? "un peu floue" : "floue";
-    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.floor(c.d)} px${!c.measurable ? " (trop petit pour mesurer)" : c.d < MIN_FULL_PX ? " (5 motifs sur 7)" : ""}`, `bord vu à ${Math.round(c.seen * 100)} %`];
+    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.floor(c.d)} px${c.found && !c.regular ? " (contour irrégulier, à vérifier)" : ""}${!c.measurable ? " (trop petit pour mesurer)" : c.d < MIN_FULL_PX ? " (5 motifs sur 7)" : ""}`, `bord vu à ${Math.round(c.seen * 100)} %`];
     if (c.paupieres >= 0.03) parts.push(`paupière ${Math.round(c.paupieres * 100)} %`);
     if (c.reflets >= 0.03) parts.push(`reflets ${Math.round(c.reflets * 100)} %`);
     return parts.join(" · ");
@@ -7588,7 +7606,7 @@
   var irisState = () => ({
     fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull, mask: fix.mask.length, strokes: fix.strokes.length, maskOn: !!fix.maskOn } : null,
     eyePick: { open: !!eyePick.resolve, best: eyePick.best ?? -1 },
-    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
+    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), regular: !!c.regular, measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
     slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto, mask: s.lm.mask?.length || 0 } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
     text: resultText()
@@ -7784,7 +7802,7 @@
     // Cadres des visages de l'album (coordonnées du recadrage), pour vérifier le masquage (AdF-044).
     albumBoxes: () => album.faces.map((f) => ({ x: f.det.box.x, y: f.det.box.y, w: f.det.box.width, h: f.det.box.height, kept: !!f.baseRef })),
     live: { detectLive, liveMeasure, lumStats },
-    iris: { state: irisState },
+    iris: { state: irisState, contourIrregular: (ro) => contourIrregular({ ro }) },
     moteur: { normalize, measures, symmetrize, appearance, sampleColors, quality }
   };
   boot();

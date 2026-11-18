@@ -888,6 +888,12 @@ with sync_playwright() as p:
     sm = pi.evaluate("AirDeFamille.iris.state().slots[1]")
     check("Iris (AdF-079) : masquer une zone au doigt et au clavier, annuler, puis zone écartée des mesures et annoncée",
           mOn and nDoigt >= 4 and nClav == nDoigt + 1 and nUndo == nDoigt and sm["lm"]["mask"] == nDoigt and "Zone masquée à la main" in sm["msg"], [mOn, nDoigt, nClav, nUndo, sm])
+    # AdF-082 : contour très irrégulier (paupière prise pour le bord) → repères à vérifier, rafale classée après.
+    ci = pi.evaluate("""() => { const f = AirDeFamille.iris.contourIrregular, n = 360;
+      const reg = Array.from({ length: n }, (_, a) => 100 * (1 + 0.12 * Math.cos(2 * Math.PI * a / n)));
+      const irr = Array.from({ length: n }, (_, a) => 100 * (1 + 0.7 * Math.sin(2 * Math.PI * a / n)));
+      return [f(reg), f(irr)]; }""")
+    check("Iris (AdF-082) : contour régulier accepté (décentrage 12 %), contour très irrégulier (0,3 à 1,7 × le rayon) signalé", ci == [False, True], ci)
     # AdF-081 : prise de l'œil guidée (caméra simulée par une image de synthèse) : taille estimée, rafale automatique,
     # tri du lot A ; iris entre 200 et 300 px : mode réduit annoncé puis rafale ; caméra refusée : choix de photos.
     def camera_oeil(ri, refus=False):

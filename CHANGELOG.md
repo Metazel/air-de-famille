@@ -12,7 +12,9 @@ Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
   mode réduit à 200 px (5 motifs sur 7), annoncé. Caméra refusée : choix de photos.
 - Niveau de comparaison : si l'un des iris fait moins de 300 px, filaments du cœur et collerette sont écartés pour
   tous ; la comparaison se fait sur 5 motifs, annoncée.
-- Tests : 188 contrôles e2e publics.
+- Contour très irrégulier (AdF-082, essai réel du 17/11 : paupière basse prise pour le bord) : l'iris passe en
+  « à corriger » avec un message au lieu d'être mesuré, et une telle photo est classée après les autres dans une rafale.
+- Tests : 189 contrôles e2e publics.
 
 ## [v2.10.0] — 2026-11-16
 
