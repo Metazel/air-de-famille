@@ -3,6 +3,17 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.12.0] — 2026-11-22
+
+- Pupille (AdF-082, photos du 17/11) : un petit cercle sombre décentré, partie la plus noire d'une pupille éclairée en
+  partie, n'est plus pris pour la pupille quand un cercle centré plus grand le contient (223941 : 0,14 → 0,35 de l'iris) ;
+  photos déjà justes inchangées.
+- Paupières (AdF-084, règle de David) : pas de paupière cherchée du côté où l'iris est bordé de blanc de l'œil (neutre ou
+  bleuté ; la peau de la paupière est chaude) ; « reflets » vus dans la paupière ou sa bordure (cils) comptés comme paupière.
+- Photo d'un visage où l'iris n'est pas trouvé (AdF-083) : la taille de l'iris est estimée d'après le visage et
+  annoncée avec ce qu'il faut faire (se rapprocher, « Photographier l'œil »).
+- Banc iris 16/19, régression 0,000000, e2e 189/189.
+
 ## [v2.11.0] — 2026-11-17
 
 - Photographier l'œil (AdF-081, lot B d'AdF-069) : prise à la caméra arrière guidée pour un proche. La caméra arrière
