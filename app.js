@@ -4682,6 +4682,7 @@
       prof.push(b);
     }
     const peaks = prof.filter((p, i) => isFinite(p.sc) && (i === 0 || p.sc >= prof[i - 1].sc) && (i === prof.length - 1 || p.sc >= prof[i + 1].sc)).sort((a, b) => b.sc - a.sc);
+    const ok = [], base2 = [];
     for (const b0 of peaks.slice(0, 4)) {
       let best = b0;
       for (let cy = b0.cy - 2; cy <= b0.cy + 2; cy += 0.5)
@@ -4692,6 +4693,7 @@
           }
       const zi = zone(best, 0.2, 0.8), zo = zone(best, 1.2, 1.6);
       if (!(best.sc >= 4) || !zi || !zo || !(zi.m < zo.m - 6)) continue;
+      base2.push(best);
       const tol = Math.max(4, 1.2 * zo.sd, 0.35 * (zo.m - zi.m));
       if (!(zi.sd < tol)) continue;
       let worst = 0;
@@ -4710,10 +4712,20 @@
       }
       if (!(worst < tol)) continue;
       if (ringM.length >= 2 && !(Math.abs(ringM[0] - ringM[ringM.length - 1]) < Math.max(4, 1.2 * zo.sd, 0.2 * (zo.m - zi.m)))) continue;
-      const out = { cx: ix + (best.cx - S) / s, cy: iy + (best.cy - S) / s, r: best.r / s, sc: best.sc, scN: best.sc / spread };
-      return refinePupil(img, out, wl, wc, thr) || out;
+      ok.push(best);
     }
-    return null;
+    if (!ok.length) return null;
+    const contains = (b, p) => {
+      const d = Math.hypot(b.cx - p.cx, b.cy - p.cy);
+      return b !== p && b.r > 1.6 * p.r && b.r <= 0.6 * r60 && d + p.r <= b.r * 1.05 && d > 0.25 * b.r && b.sc >= 0.6 * p.sc;
+    };
+    let pick = ok[0];
+    if (Math.hypot(pick.cx - S, pick.cy - S) > 0.1 * r60) {
+      const small = pick;
+      for (const b of base2) if (Math.hypot(b.cx - S, b.cy - S) <= 0.07 * r60 && contains(b, small) && (pick === small || b.sc > pick.sc)) pick = b;
+    }
+    const out = { cx: ix + (pick.cx - S) / s, cy: iy + (pick.cy - S) / s, r: pick.r / s, sc: pick.sc, scN: pick.sc / spread };
+    return refinePupil(img, out, wl, wc, thr) || out;
   }
   function refinePupil(img, p, wl, wc, thr) {
     const { width: W, height: H, data: D } = img, s = 40 / p.r;
@@ -5102,6 +5114,10 @@
       for (let y = Math.max(0, Math.floor(y0 - rr)); y <= Math.min(S - 1, Math.ceil(y0 + rr)); y++)
         for (let x = Math.max(0, Math.floor(x0 - rr)); x <= Math.min(S - 1, Math.ceil(x0 + rr)); x++) if ((x - x0) ** 2 + (y - y0) ** 2 <= rr * rr) user[y * S + x] = 1;
     }
+    if (lid.some((v) => v)) {
+      const wide = dilateDisk(lid, S, S, Math.max(2, Math.round(0.04 * riN)));
+      for (let i = 0; i < spec.length; i++) if (spec[i] && wide[i] && !user[i]) lid[i] = 1;
+    }
     let hR = 0, hL = 0, hU = 0;
     for (let i = 0; i < spec.length; i++) {
       if (zone[i]) {
@@ -5184,21 +5200,24 @@
     const lid = new Uint8Array(S * S), D = N.data, at = (i) => [D[i * 4], D[i * 4 + 1], D[i * 4 + 2]];
     const med3 = (list) => [0, 1, 2].map((c) => medianOf(list.map((v) => v[c])));
     const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-    const irisRef = [], skinUp = [], skinDown = [];
+    const irisRef = [], skinUp = [], skinDown = [], scleraRef = [];
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
         const dx = x - lmN.cx, dy = y - lmN.cy, r = Math.hypot(dx, dy), t = Math.atan2(dy, dx), e = edgeAt(lmN.ro, t), i = y * S + x;
         const lat = Math.abs(Math.cos(t)) > 0.87;
         if (lat && r > lmN.rp * 1.3 && r < e * 0.9) irisRef.push(at(i));
+        if (lat && r > e * 1.05 && r < e * 1.2) scleraRef.push(at(i));
         if (r > e * 1.03 && r < e * 1.11 && Math.abs(Math.sin(t)) > 0.77) (dy < 0 ? skinUp : skinDown).push(at(i));
       }
     if (irisRef.length < 50) return lid;
-    const iris = med3(irisRef);
+    const iris = med3(irisRef), sclera = scleraRef.length >= 30 ? med3(scleraRef) : null;
     for (const [list, up] of [[skinUp, true], [skinDown, false]]) {
       if (list.length < 30) continue;
       const skin = med3(list), mx = Math.max(...skin);
       if (dist(skin, iris) < 30) continue;
       if (mx > 235 || (mx - Math.min(...skin)) / (mx + 20) < 0.12) continue;
+      const warm = (c) => c[0] - c[2];
+      if (warm(skin) < (sclera ? warm(sclera) : 0) + 8) continue;
       const cand = new Uint8Array(S * S);
       for (let y = 0; y < S; y++)
         for (let x = 0; x < S; x++) {
@@ -6396,6 +6415,18 @@
     }
     if (gen !== s.gen) return;
     let focused = false;
+    let faceNote = "";
+    if (!lm) {
+      try {
+        $(".istate", el2(s)).textContent = "Recherche du visage…";
+        const d2 = await faceIrisEstimate(s, gen);
+        if (gen !== s.gen) return;
+        if (d2 && d2 < MIN_MEASURE_PX)
+          faceNote = ` Photo d'un visage : iris d'environ ${Math.round(d2)} px, il en faut ${MIN_MEASURE_PX} pour mesurer (${MIN_FULL_PX} pour les 7 motifs). Rapprochez-vous de l'œil, ou utilisez « Photographier l'œil ».`;
+      } catch (e) {
+        console.warn(e);
+      }
+    }
     if (lm?.eyes?.length === 2) {
       const ask = open2 && canAutoOpen(), pick = ask ? await chooseEye(s, lm.eyes, gen) : null;
       if (gen !== s.gen) return;
@@ -6440,10 +6471,10 @@
     if (!lm) {
       s.status = "tofix";
       s.lm = defaultLandmarks(s.img);
-      s.msg = "Iris non trouvé automatiquement : placez les repères (« Corriger les repères »), puis validez.";
+      s.msg = "Iris non trouvé automatiquement : placez les repères (« Corriger les repères »), puis validez." + faceNote;
       s.warn = "1";
       renderSlot2(s);
-      say4(`${nameOf(s)} : iris non trouvé, repères à placer à la main.`);
+      say4(`${nameOf(s)} : iris non trouvé, repères à placer à la main.${faceNote}`);
       if (open2 && canAutoOpen()) openFix(s);
       return;
     }
@@ -7416,6 +7447,16 @@
     initBurst();
     initEyePick();
     islots.forEach(renderSlot2);
+  }
+  async function faceIrisEstimate(s, gen) {
+    if (!window.faceapi?.nets?.ssdMobilenetv1?.isLoaded || !window.faceapi.nets.faceLandmark68Net?.isLoaded) return null;
+    const W = s.img.width, H = s.img.height, z = Math.min(1, 640 / Math.max(W, H)), c = makeCanvas(Math.round(W * z), Math.round(H * z));
+    ctx2d(c).drawImage(s.src, 0, 0, c.width, c.height);
+    const r = await faceapi.detectSingleFace(c, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })).withFaceLandmarks();
+    c.width = c.height = 0;
+    if (!r || gen !== s.gen) return null;
+    const P = r.landmarks.positions, w = (a, b) => Math.hypot(P[a].x - P[b].x, P[a].y - P[b].y) / z;
+    return 0.46 * Math.max(w(36, 39), w(42, 45)) / (s.map?.f || 1);
   }
   var eyePick = { resolve: null };
   function eyeThumb(s, e) {
