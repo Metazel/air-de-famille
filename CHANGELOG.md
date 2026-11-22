@@ -3,6 +3,19 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions `vX.Y.Z`.
 Les identifiants `AdF-NNN` renvoient au registre de suivi du projet.
 
+## [v2.11.0] — 2026-11-17
+
+- Photographier l'œil (AdF-081, lot B d'AdF-069) : prise à la caméra arrière guidée pour un proche. La caméra arrière
+  aux photos les plus détaillées est choisie, zoom ×2 si possible ; la taille de l'iris dans la future photo est
+  estimée en direct ; consignes par la voix, des bips, la vibration et le texte ; rafale de 5 photos prise toute seule
+  à 300 px (ou au bouton), triée comme une rafale importée. Si 300 px ne sont pas atteints après 8 s de visée stable,
+  mode réduit à 200 px (5 motifs sur 7), annoncé. Caméra refusée : choix de photos.
+- Niveau de comparaison : si l'un des iris fait moins de 300 px, filaments du cœur et collerette sont écartés pour
+  tous ; la comparaison se fait sur 5 motifs, annoncée.
+- Contour très irrégulier (AdF-082, essai réel du 17/11 : paupière basse prise pour le bord) : l'iris passe en
+  « à corriger » avec un message au lieu d'être mesuré, et une telle photo est classée après les autres dans une rafale.
+- Tests : 189 contrôles e2e publics.
+
 ## [v2.10.0] — 2026-11-16
 
 - Taille de l'iris (AdF-080) : seuil de mesure fixé par un banc (18 iris réduits à 300, 250, 200 et 150 px). Dès

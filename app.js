@@ -781,14 +781,14 @@
     let dets = await detectAll(canvas);
     if (!dets.length) return { work: canvas, faces: [] };
     dets.sort((a, b) => b.detection.box.area - a.detection.box.area);
-    let work2 = exposeFace(canvas, dets[0].detection.box);
-    if (work2 !== canvas) {
+    let work3 = exposeFace(canvas, dets[0].detection.box);
+    if (work3 !== canvas) {
       await onStep?.("light");
-      const d2 = await detectAll(work2);
+      const d2 = await detectAll(work3);
       if (d2.length) dets = d2.sort((a, b) => b.detection.box.area - a.detection.box.area);
-      else work2 = canvas;
+      else work3 = canvas;
     }
-    return { work: work2, faces: dets.slice(0, 8) };
+    return { work: work3, faces: dets.slice(0, 8) };
   }
   async function describeVideo(frames) {
     const cand = [];
@@ -1997,13 +1997,13 @@
     s.prog.tick = setInterval(() => paintProg(s), 1e3);
     srSay(`${label} : analyse en cours.`);
   }
-  async function advance(s, step2) {
+  async function advance(s, step3) {
     const p = s.prog;
-    if (!p || p.step === step2) return;
+    if (!p || p.step === step3) return;
     const now = performance.now();
     if (p.step !== "wait") dur[p.step] = dur[p.step] * 0.6 + (now - p.ts) / 1e3 * 0.4;
     p.done.push(p.step);
-    p.step = step2;
+    p.step = step3;
     p.ts = now;
     paintProg(s);
     await new Promise((r) => setTimeout(r, 0));
@@ -2231,9 +2231,9 @@
           s.status = "ok";
           return;
         }
-        const { work: work2, faces } = await findFaces(s.canvas, onStep);
+        const { work: work3, faces } = await findFaces(s.canvas, onStep);
         if (gen !== s.gen) return;
-        s.work = work2;
+        s.work = work3;
         s.faces = faces;
         s.faceIdx = 0;
         if (!faces.length) {
@@ -2241,7 +2241,7 @@
           s.det = null;
           return;
         }
-        const det = await describe(work2, faces[0], s.canvas, onStep);
+        const det = await describe(work3, faces[0], s.canvas, onStep);
         if (gen !== s.gen) return;
         s.det = s.realAge != null ? requalify(det, s.realAge) : det;
         refresh(s);
@@ -2291,13 +2291,13 @@
       if (!det) {
         startProg(s, `Photo ajoutée à ${LET[s.i]}`);
         renderSlot(s);
-        const step2 = (k) => advance(s, k);
+        const step3 = (k) => advance(s, k);
         const c = await decodeImage(file);
         det = await enqueue(async () => {
           if (gen !== s.gen || eg !== s.extraGen) return null;
-          const { work: work2, faces } = await findFaces(c, step2);
+          const { work: work3, faces } = await findFaces(c, step3);
           if (!faces.length || gen !== s.gen || eg !== s.extraGen) return faces.length ? null : "noface";
-          return describe(work2, faces[0], c, step2);
+          return describe(work3, faces[0], c, step3);
         });
       }
     } catch (err) {
@@ -2919,14 +2919,14 @@
     g.strokeStyle = cssVar("--line");
     g.lineWidth = 1;
     g.globalAlpha = 0.55;
-    const step2 = 0.25 * k;
-    for (let v = X(0) % step2; v < W; v += step2) {
+    const step3 = 0.25 * k;
+    for (let v = X(0) % step3; v < W; v += step3) {
       g.beginPath();
       g.moveTo(v, 0);
       g.lineTo(v, W);
       g.stroke();
     }
-    for (let v = Y(0) % step2; v < W; v += step2) {
+    for (let v = Y(0) % step3; v < W; v += step3) {
       g.beginPath();
       g.moveTo(0, v);
       g.lineTo(W, v);
@@ -3039,10 +3039,10 @@
     if (R.lens) mentions.push(["--muted", "500 28px", "Yeux non notés : lunettes confirmées"]);
     if (ng) mentions.push(["--bad", "600 30px", main.length ? "Fiabilité limitée : écart d'âge, pas de score global" : "Fiabilité limitée : aucun trait stable mesurable"]);
     if (slots[a].simulated || slots[b].simulated) mentions.push(["--bad", "600 30px", "Contient une image simulée"]);
-    const step2 = Math.min(46, (H - 1030 - 90 - mentions.length * 44) / Math.max(1, main.length));
-    const bh = Math.min(22, step2 - 8), fs = Math.round(Math.min(32, step2 - 4));
+    const step3 = Math.min(46, (H - 1030 - 90 - mentions.length * 44) / Math.max(1, main.length));
+    const bh = Math.min(22, step3 - 8), fs = Math.round(Math.min(32, step3 - 4));
     main.forEach((r, n) => {
-      const y = 1035 + n * step2, x0 = 330, bw = 560;
+      const y = 1035 + n * step3, x0 = 330, bw = 560;
       g.textAlign = "right";
       g.fillStyle = C("--muted");
       g.font = `500 ${fs}px "Familjen Grotesk", system-ui, sans-serif`;
@@ -3188,9 +3188,9 @@
       await enqueue(async () => {
         try {
           const [canvas, date] = await Promise.all([decodeImage(file), exifDate(file)]);
-          const { work: work2, faces } = await findFaces(canvas);
+          const { work: work3, faces } = await findFaces(canvas);
           for (let n = 0; n < faces.length; n++) {
-            const det = await describe(work2, faces[n], canvas);
+            const det = await describe(work3, faces[n], canvas);
             album.faces.push(cropEntry(canvas, det, { date: date ? date.slice(0, 7) : "", src: file.name, n: n + 1, of: faces.length }));
             found++;
           }
@@ -3930,11 +3930,11 @@
             const bmp = await createImageBitmap(it.jpeg);
             const c = makeCanvas(bmp.width, bmp.height);
             c.getContext("2d").drawImage(bmp, 0, 0);
-            const { work: work2, faces } = await findFaces(c);
+            const { work: work3, faces } = await findFaces(c);
             if (!faces.length || gen !== base.gen) lost++;
             else {
               const mid = (d) => Math.hypot(d.detection.box.x + d.detection.box.width / 2 - c.width / 2, d.detection.box.y + d.detection.box.height / 2 - c.height / 2);
-              const det = await describe(work2, faces.reduce((a, b) => mid(b) < mid(a) ? b : a), c);
+              const det = await describe(work3, faces.reduce((a, b) => mid(b) < mid(a) ? b : a), c);
               if (gen !== base.gen || !base.items.some((i) => i.ref === it.ref)) return;
               albumFace(c, det, { date: it.date, src: "Ma base", n: 1, of: 1, person: it.person, typed: it.typed, baseRef: it.ref });
               added++;
@@ -4084,253 +4084,6 @@
   }
   var findSource = (id) => faceSources().find((f) => f.id === id) || null;
 
-  // src/js/ui/aging.js
-  var target = null;
-  var last = null;
-  var memo = "";
-  function refresh2() {
-    const src = faceSources();
-    $("#agNoFace").hidden = !!src.length;
-    $("#agPanel").hidden = !src.length;
-    if (!src.length) {
-      last = null;
-      return;
-    }
-    const sid = fillSelect(
-      $("#agSrc"),
-      src.map((f) => ({ value: f.id, label: f.label }))
-    );
-    fillSelect(
-      $("#agModel"),
-      [{ value: "", label: "Aucun" }].concat(src.filter((f) => f.id !== sid).map((f) => ({ value: f.id, label: f.label })))
-    );
-    const s = findSource(sid), model = $("#agModel").value, sex = $("#agSex").value;
-    const need = [
-      s.age != null ? `<li class="ok">Âge réel connu : ${ageLabel(s.age)}</li>` : `<li class="miss">Indiquez l'âge réel (sinon l'âge estimé, ${ageLabel(s.det.age, true)}, est utilisé)</li>`,
-      s.det.warn.includes("Visage tourné") ? '<li class="miss">Photo de face conseillée : ce visage est tourné</li>' : '<li class="ok">Visage de face</li>',
-      sex ? '<li class="ok">Sexe précisé</li>' : `<li class="miss">Précisez le sexe si l'âge cible franchit la puberté</li>`,
-      model ? `<li class="ok">Modèle familial choisi (un parent photographié à l'âge cible, comme le font les portraitistes)</li>` : "<li>Facultatif : un parent photographié à l'âge cible rend la forme adulte plus plausible</li>"
-    ];
-    $("#agNeed").innerHTML = need.join("");
-    run2();
-  }
-  function run2() {
-    if (target == null) return;
-    const s = findSource($("#agSrc").value);
-    if (!s) return;
-    const modelSrc = $("#agModel").value ? findSource($("#agModel").value) : null;
-    const w = +$("#agW").value / 100, sex = $("#agSex").value;
-    const key = [s.id, s.det.id, s.age, target, sex, modelSrc?.det.id, w, cssVar("--sunk")].join("|");
-    if (key === memo && last) return;
-    memo = key;
-    const r = ageSimulate(s, target, { sex, model: modelSrc?.det, w, bg: cssVar("--sunk") });
-    last = { r, s };
-    const draw2 = (id, c) => {
-      const cv = $(id);
-      cv.width = c.width;
-      cv.height = c.height;
-      cv.getContext("2d").drawImage(c, 0, 0);
-    };
-    draw2("#agBefore", r.head);
-    draw2("#agAfter", r.out);
-    $("#agCapA").textContent = `${s.name} · ${ageLabel(r.from, s.age == null)}${s.age == null ? " (estimé)" : ""}`;
-    $("#agCapB").textContent = `Image simulée · ${ageLabel(r.to)}`;
-    stamp($("#agAfter"));
-    $("#agOut").hidden = false;
-    $("#agUse").hidden = false;
-  }
-  function initAging() {
-    $("#agTarget").addEventListener("click", (e) => {
-      const b = e.target.closest("button");
-      if (!b) return;
-      target = +b.dataset.age;
-      $$("#agTarget button").forEach((x) => x.setAttribute("aria-pressed", x === b));
-      run2();
-    });
-    ["agSrc", "agSex", "agModel"].forEach((id) => $(`#${id}`).addEventListener("change", refresh2));
-    $("#agW").addEventListener("input", (e) => {
-      $("#agWv").textContent = `${e.target.value} %`;
-      run2();
-    });
-    $("#agUse").addEventListener("click", () => {
-      if (!last) return;
-      const { r, s } = last, c = makeCanvas(r.out.width * 2, r.out.height * 2), g = c.getContext("2d");
-      g.imageSmoothingQuality = "high";
-      g.drawImage(r.out, 0, 0, c.width, c.height);
-      sendToSlot(c, { name: `${s.name} ${Math.round(r.to)} ans (simulé)`.slice(0, 24), age: r.to, simulated: true }, s.slot != null ? [s.slot] : []);
-    });
-    on("faces", refresh2);
-    on("theme", () => {
-      memo = "";
-      refresh2();
-    });
-    refresh2();
-  }
-
-  // src/js/ui/fusion.js
-  var prep = null;
-  var prepKey = "";
-  var renderKey = "";
-  var result = null;
-  var playing = 0;
-  var reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function refresh22() {
-    const src = faceSources();
-    const enough = src.length >= 2;
-    $("#fuNoFace").hidden = enough;
-    $("#fuPanel").hidden = !enough;
-    if (!enough) {
-      prep = null;
-      return;
-    }
-    const opts = src.map((f) => ({ value: f.id, label: f.label }));
-    const a = fillSelect($("#fuA"), opts);
-    let b = fillSelect($("#fuB"), opts);
-    if (b === a) {
-      b = opts.find((o) => o.value !== a).value;
-      $("#fuB").value = b;
-    }
-    render2();
-  }
-  function ensurePrep() {
-    const A = findSource($("#fuA").value), B = findSource($("#fuB").value);
-    if (!A || !B) return null;
-    const key = [A.id, A.det.id, B.id, B.det.id, cssVar("--sunk")].join("|");
-    if (key !== prepKey) {
-      prep = prepareMorph(A, B, cssVar("--sunk"));
-      prepKey = key;
-      draw("#fuCa", vignetteCopy(prep.headA));
-      draw("#fuCb", vignetteCopy(prep.headB));
-      $("#fuCapA").textContent = A.name;
-      $("#fuCapB").textContent = B.name;
-      $("#fuNameA").textContent = A.name;
-      $("#fuNameB").textContent = B.name;
-    }
-    return prep;
-  }
-  var vignetteCopy = (c) => {
-    const o = makeCanvas(c.width, c.height);
-    o.getContext("2d").drawImage(c, 0, 0);
-    return vignette(o, cssVar("--sunk"));
-  };
-  var draw = (id, c) => {
-    const cv = $(id);
-    cv.width = c.width;
-    cv.height = c.height;
-    cv.getContext("2d").drawImage(c, 0, 0);
-  };
-  function compute(t, quick = false) {
-    const p = ensurePrep();
-    if (!p) return null;
-    const m = morph(p, t);
-    const ageA = p.A.age ?? p.A.det.age, ageB = p.B.age ?? p.B.det.age, from = ageA * (1 - t) + ageB * t;
-    const target2 = $("#fuAge").value;
-    let out = vignette(m.out, cssVar("--sunk")), age = from;
-    if (target2 && !quick) {
-      const det = { norm: m.norm, frame: HEAD_FRAME, age: from };
-      out = vignette(ageSimulate({ canvas: m.out, det, age: from, head: m.out }, +target2, { bg: cssVar("--sunk") }).out, cssVar("--sunk"));
-      age = +target2;
-    }
-    return { out, t, age, from, A: p.A, B: p.B };
-  }
-  function render2() {
-    const t = +$("#fuT").value / 100;
-    $("#fuTv").textContent = `${Math.round(t * 100)} %`;
-    const A = findSource($("#fuA").value), B = findSource($("#fuB").value);
-    const key = [A?.id, A?.det.id, A?.age, B?.id, B?.det.id, B?.age, t, $("#fuAge").value, cssVar("--sunk")].join("|");
-    if (key === renderKey && result) {
-      $("#fuCapA").textContent = A.name;
-      $("#fuCapB").textContent = B.name;
-      $("#fuNameA").textContent = A.name;
-      $("#fuNameB").textContent = B.name;
-      return;
-    }
-    renderKey = key;
-    result = compute(t);
-    if (!result) return;
-    draw("#fuCm", result.out);
-    stamp($("#fuCm"));
-    $("#fuCapM").textContent = `Image simulée · ${Math.round((1 - t) * 100)} / ${Math.round(t * 100)}${$("#fuAge").value ? ` · ${ageLabel(result.age)}` : ""}`;
-  }
-  var renderSoon = debounce(render2, 60);
-  function play() {
-    if (playing) {
-      stop();
-      return;
-    }
-    if (reduceMotion()) {
-      toast("Animation désactivée (réglage « réduire les animations » de l'appareil).");
-      return;
-    }
-    $("#fuPlay").setAttribute("aria-pressed", "true");
-    $("#fuPlay").textContent = "Arrêter";
-    const t0 = performance.now();
-    const step2 = (now) => {
-      if (!playing) return;
-      const t = 0.5 - 0.5 * Math.cos((now - t0) / 4e3 * 2 * Math.PI);
-      const r = compute(t, true);
-      if (r) {
-        draw("#fuCm", r.out);
-        stamp($("#fuCm"));
-      }
-      $("#fuTv").textContent = `${Math.round(t * 100)} %`;
-      playing = requestAnimationFrame(step2);
-    };
-    playing = requestAnimationFrame(step2);
-  }
-  function stop() {
-    cancelAnimationFrame(playing);
-    playing = 0;
-    $("#fuPlay").setAttribute("aria-pressed", "false");
-    $("#fuPlay").textContent = "Animer le fondu";
-    renderKey = "";
-    render2();
-  }
-  function initFusion() {
-    ["fuA", "fuB"].forEach(
-      (id) => $(`#${id}`).addEventListener("change", () => {
-        if ($("#fuA").value === $("#fuB").value) toast("Choisissez deux visages différents.");
-        render2();
-      })
-    );
-    $("#fuAge").addEventListener("change", render2);
-    $("#fuT").addEventListener("input", () => {
-      if (playing) stop();
-      renderSoon();
-    });
-    $("#fuPlay").addEventListener("click", play);
-    $("#fuEnfant").addEventListener("click", () => {
-      if (playing) stop();
-      $("#fuT").value = 50;
-      $("#fuAge").value = "7";
-      render2();
-    });
-    $("#fuUse").addEventListener("click", () => {
-      if (!result) return;
-      const c = makeCanvas(result.out.width * 2, result.out.height * 2), g = c.getContext("2d");
-      g.imageSmoothingQuality = "high";
-      g.drawImage(result.out, 0, 0, c.width, c.height);
-      const name = `Fusion ${result.A.name.slice(0, 8)}+${result.B.name.slice(0, 8)}`.slice(0, 24);
-      sendToSlot(
-        c,
-        { name, age: result.age, simulated: true },
-        [result.A.slot, result.B.slot].filter((x) => x != null)
-      );
-    });
-    on("faces", () => {
-      if (!playing) refresh22();
-    });
-    on("theme", () => {
-      prepKey = "";
-      renderKey = "";
-      refresh22();
-    });
-    on("mode", (m) => {
-      if (m !== "fusion" && playing) stop();
-    });
-    refresh22();
-  }
-
   // src/js/engine/iris/img.js
   var refl = (i, n) => {
     if (n === 1) return 0;
@@ -4474,7 +4227,7 @@
           }
         const add = Math.floor(ex / 256), rest = ex - add * 256;
         for (let v = 0; v < 256; v++) hist[v] += add;
-        if (rest) for (let v = 0, step2 = Math.max(1, Math.floor(256 / rest)), n = 0; v < 256 && n < rest; v += step2, n++) hist[v]++;
+        if (rest) for (let v = 0, step3 = Math.max(1, Math.floor(256 / rest)), n = 0; v < 256 && n < rest; v += step3, n++) hist[v]++;
         const lut = new Float32Array(256);
         let c = 0;
         for (let v = 0; v < 256; v++) lut[v] = Math.min(255, Math.round((c += hist[v]) * 255 / area));
@@ -4752,8 +4505,8 @@
       }
     return coarse > 0 ? fine / coarse : 0;
   }
-  async function daugman(g, cn, w, h) {
-    const k = 384 / Math.max(w, h), sw = Math.round(w * k), sh = Math.round(h * k);
+  async function daugman(g, cn, w, h, base2 = 384, quick = false) {
+    const k = base2 / Math.max(w, h), sw = Math.round(w * k), sh = Math.round(h * k);
     const small = new Float32Array(sw * sh), smallC = new Float32Array(sw * sh);
     for (let y = 0; y < sh; y++)
       for (let x = 0; x < sw; x++) {
@@ -4782,8 +4535,8 @@
         n++;
       }
     };
-    take([...mins].sort((a, b) => a[0] - b[0]), 40);
-    take([...mins].sort((a, b) => a[3] - b[3]), 30);
+    take([...mins].sort((a, b) => a[0] - b[0]), quick ? 10 : 40);
+    take([...mins].sort((a, b) => a[3] - b[3]), quick ? 6 : 30);
     const plausible = (c) => c.pl ??= plausible0(c);
     const plausible0 = (c) => {
       if (c.cx < c.r * 0.6 || c.cy < c.r * 0.6 || c.cx > sw - c.r * 0.6 || c.cy > sh - c.r * 0.6) return 0;
@@ -4817,7 +4570,7 @@
       const sdAnn = ringSd(small, sw, sh, big.cx, big.cy, big.r, Math.min(0.8, c.r * 1.3 / big.r), 0.85), sdOut = ringSd(small, sw, sh, big.cx, big.cy, big.r, 1.08, 1.3);
       return outSmall < outBig - 15 && sdAnn >= Math.max(4, 0.7 * sdOut) ? big : null;
     };
-    const rs = radii(Math.max(4, mn * 0.025), mn * 0.62), found = [];
+    const rs = radii(Math.max(quick ? 3 : 4, mn * 0.025), mn * 0.62), found = [];
     for (let n = 0; n < cand.length; n++) {
       const [, x, y] = cand[n];
       found.push(search(sb, sw, sh, range(x - 4, x + 4, 2), range(y - 4, y + 4, 2), rs));
@@ -5049,6 +4802,15 @@
       out[a] = medianOf(win);
     }
     return out;
+  }
+  async function quickIris(img) {
+    const W = img.width, H = img.height, g = gray(img), cn = new Float32Array(W * H);
+    for (let i = 0, j = 0; i < cn.length; i++, j += 4) {
+      const r = img.data[j], gg = img.data[j + 1], b = img.data[j + 2], mx = Math.max(r, gg, b);
+      cn[i] = (mx - Math.min(r, gg, b)) / (mx + 40);
+    }
+    const d = await daugman(g, cn, W, H, Math.max(W, H), true);
+    return isFinite(d.R0) && d.contrast >= 2 ? { cx: d.ix, cy: d.iy, r: d.R0 } : null;
   }
   async function segmentIris(img, { onStep = () => {
   } } = {}) {
@@ -5485,7 +5247,7 @@
     }
     return kept;
   }
-  async function irisMotifs(N, lmN, sheet, { mirror = false, spec = null, sheetSpec = null, stop: stop2 = () => false } = {}) {
+  async function irisMotifs(N, lmN, sheet, { mirror = false, spec = null, sheetSpec = null, stop: stop3 = () => false } = {}) {
     const nR = sheet.width, nA = sheet.height, sg = gray(sheet), ok = new Uint8Array(nR * nA);
     for (let y = 0; y < nA; y++)
       for (let x = 0; x < nR; x++) {
@@ -5591,7 +5353,7 @@
     put("filaments_milieu", share(third, two), cover(third, two), "milieu de l'iris peu visible");
     put("sillons_bord", 1 - share(two, nR, false), cover(two, nR), "pourtour peu visible");
     await yieldNow2();
-    if (stop2()) throw new Error("annulé");
+    if (stop3()) throw new Error("annulé");
     const b1 = blur(gry, nR, nA, 1.5), b5 = blur(gry, nR, nA, 5), cm = new Uint8Array(nR * nA);
     for (let i = 0; i < cm.length; i++) cm[i] = b1[i] - b5[i] < -12 && ok[i] ? 1 : 0;
     const all = cover(0, nR);
@@ -5608,7 +5370,7 @@
     const cIn = Lin.length / Math.max(1, (third - 3) * nA), cOut = Lout.length / Math.max(1, (nR - 3 - two) * nA);
     put("clarte_coeur_bord", medianOf(Lout) - medianOf(Lin), Math.min(cIn, cOut), "cœur ou pourtour peu visible", false);
     await yieldNow2();
-    if (stop2()) throw new Error("annulé");
+    if (stop3()) throw new Error("annulé");
     const S = N.width, gN = gray(N), gc = clahe(gN, S, S, 2, 8, 8), gb = blur(gc, S, S, 1.5), { gx, gy } = sobel(gb, S, S);
     const n2 = S * S, xx = new Float32Array(n2), yy = new Float32Array(n2), xy = new Float32Array(n2);
     for (let i = 0; i < n2; i++) {
@@ -5617,10 +5379,10 @@
       xy[i] = gx[i] * gy[i];
     }
     await yieldNow2();
-    if (stop2()) throw new Error("annulé");
+    if (stop3()) throw new Error("annulé");
     const Jxx = blur(xx, S, S, 4), Jyy = blur(yy, S, S, 4), Jxy = blur(xy, S, S, 4);
     await yieldNow2();
-    if (stop2()) throw new Error("annulé");
+    if (stop3()) throw new Error("annulé");
     let tot = 0, wsp = 0, wci = 0, wra = 0, wpos = 0, wneg = 0, ringN = 0, ringExp = 0, eRing = 0, eMid = 0, nMid = 0;
     const rin = lmN.rp * 1.08;
     for (let y = 0; y < S; y++)
@@ -5768,9 +5530,9 @@
   var FINE = ["filaments_coeur", "collerette"];
   var irisDiameter = (lm) => 2 * medianOf(lm.ro);
   async function analyzeIris(img, lm, { mirror = false, onStep = () => {
-  }, stop: stop2 = () => false } = {}) {
+  }, stop: stop3 = () => false } = {}) {
     const check = () => {
-      if (stop2()) throw new Error("annulé");
+      if (stop3()) throw new Error("annulé");
     };
     const d = irisDiameter(lm);
     if (d < MIN_MEASURE_PX) {
@@ -5790,7 +5552,7 @@
     const sheet = unwrap(N, lmN, { mirror }), sheetSpec = unwrapMask(spec, N.width, lmN, { mirror });
     check();
     onStep("Mesure des motifs");
-    const m = await irisMotifs(N, lmN, sheet, { mirror, spec, sheetSpec, stop: stop2 });
+    const m = await irisMotifs(N, lmN, sheet, { mirror, spec, sheetSpec, stop: stop3 });
     if (d < MIN_FULL_PX) {
       for (const k of FINE)
         if (k in m.F) {
@@ -5834,6 +5596,12 @@
     if (m.length) lm.mask = m;
     return lm;
   };
+  var contourIrregular = (lm) => {
+    const v = Array.from(lm.ro).filter(isFinite).sort((a, b) => a - b);
+    if (v.length < 8) return true;
+    const m = v[v.length >> 1];
+    return v[v.length - 1] / m > 1.35 || v[0] / m < 0.7;
+  };
   var maskedShare = (img, lm) => lm.mask?.length ? normalizeIris(img, lm, { fast: true }).hidden.user : 0;
   function photoQuality(img, lm) {
     const nA = 360, nR = 64, sh = unwrap(img, lm, { nA, nR }), g = gray(sh), ok = new Uint8Array(nA * nR);
@@ -5857,6 +5625,586 @@
     return { sharp: rat.length ? medianOf(rat) : 0, reflets: hidden.refl, paupieres: hidden.lid };
   }
 
+  // src/js/ui/eyecam.js
+  var ec = { session: 0, stream: null, timer: null, target: null, voice: true, last: "", lastSaid: 0, pending: "", pendingN: 0, saidN: 0, prev: null, okSince: 0, aimSince: 0, shooting: 0, shot: 0, openTok: 0, photoW: 0, noPhoto: false, zoom: null, goal: MIN_FULL_PX, est: 0, audio: null, beepAt: 0, deviceId: null };
+  var BURST = 5;
+  var FRAME = 240;
+  var CROP = 0.6;
+  var REDUCE_AFTER = 8e3;
+  var alive2 = (sess) => sess === ec.session && !$("#eyeCamSheet").hidden;
+  var canSpeak2 = () => "speechSynthesis" in window;
+  function say3(text, force = false) {
+    $("#eyeCamText").textContent = text;
+    const now = performance.now();
+    if (!force && text === ec.last && now - ec.lastSaid < 4e3) return;
+    if (!force && ec.voice && canSpeak2() && speechSynthesis.speaking && now - ec.lastSaid < 4e3) return;
+    ec.last = text;
+    ec.lastSaid = now;
+    const v = ec.voice && canSpeak2() ? speechSynthesis.getVoices().find((x) => x.lang?.toLowerCase().startsWith("fr") && x.localService) : null;
+    if (!v) {
+      $("#eyeCamSay").textContent = text;
+      return;
+    }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "fr-FR";
+    u.voice = v;
+    speechSynthesis.speak(u);
+  }
+  function beep2(freq, ms = 70) {
+    try {
+      ec.audio ??= new (window.AudioContext || window.webkitAudioContext)();
+      const a = ec.audio, o = a.createOscillator(), g = a.createGain();
+      if (a.state === "suspended") a.resume();
+      o.frequency.value = freq;
+      g.gain.value = 0.06;
+      o.connect(g).connect(a.destination);
+      o.start();
+      o.stop(a.currentTime + ms / 1e3);
+    } catch {
+    }
+  }
+  var buzz2 = (p) => {
+    try {
+      navigator.vibrate?.(p);
+    } catch {
+    }
+  };
+  function initEyeCam() {
+    $("#eyeCamConsent").addEventListener("change", () => $("#eyeCamGo").disabled = !$("#eyeCamConsent").checked);
+    $("#eyeCamGo").addEventListener("click", start);
+    $("#eyeCamShot").addEventListener("click", () => shoot2(ec.session));
+    $("#eyeCamResume").addEventListener("click", () => openStream2(ec.session));
+    for (const b of ["#eyeCamFile", "#eyeCamFile2"])
+      $(b).addEventListener("click", () => {
+        const t = ec.target;
+        closeDialog();
+        t?.pickFiles?.();
+      });
+    $("#eyeCamVoice").addEventListener("click", () => {
+      ec.voice = !ec.voice;
+      $("#eyeCamVoice").setAttribute("aria-pressed", String(ec.voice));
+      $("#eyeCamSay").textContent = ec.voice ? "" : $("#eyeCamText").textContent;
+      if (!ec.voice && canSpeak2()) speechSynthesis.cancel();
+    });
+    for (const [id, d] of [["#eyeCamZoomOut", -0.5], ["#eyeCamZoomIn", 0.5]]) $(id).addEventListener("click", () => setZoom((ec.zoom?.v || 1) + d));
+    document.addEventListener("visibilitychange", () => {
+      if ($("#eyeCamSheet").hidden || $("#eyeCamLive").hidden) return;
+      if (document.hidden) pause2();
+      else if (!$("#eyeCamPaused").hidden) $("#eyeCamResume").focus();
+    });
+  }
+  function openEyeCam(target2) {
+    ec.session++;
+    ec.target = target2;
+    $("#eyeCamWho").textContent = target2.name ? ` (${target2.name})` : "";
+    $("#eyeCamIntro").hidden = false;
+    $("#eyeCamLive").hidden = true;
+    $("#eyeCamConsent").checked = false;
+    $("#eyeCamGo").disabled = true;
+    $("#eyeCamSay").textContent = "";
+    $("#eyeCamNoCam").hidden = $("#eyeCamPaused").hidden = true;
+    $("#eyeCamZoomIn").hidden = $("#eyeCamZoomOut").hidden = true;
+    $("#eyeCamZoomState").textContent = $("#eyeCamSize").textContent = $("#eyeCamText").textContent = "";
+    $("#eyeCamShot").disabled = true;
+    ec.noPhoto = false;
+    openDialog($("#eyeCamSheet"), stop);
+  }
+  function pause2() {
+    ec.openTok++;
+    ec.shooting = 0;
+    stopStream2();
+    $("#eyeCamPaused").hidden = false;
+    $("#eyeCamShot").disabled = true;
+  }
+  async function start() {
+    const sess = ec.session;
+    $("#eyeCamIntro").hidden = true;
+    $("#eyeCamLive").hidden = false;
+    $("#eyeCamText").focus();
+    say3("Préparation de la caméra…", true);
+    if (!ec.deviceId) ec.deviceId = await bestBackCamera(sess);
+    if (!alive2(sess)) return;
+    if (document.hidden) return pause2();
+    await openStream2(sess);
+  }
+  async function bestBackCamera(sess) {
+    try {
+      const first = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      first.getTracks().forEach((t) => t.stop());
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+      if (cams.length < 2) return null;
+      let best = null;
+      for (const c of cams) {
+        if (!alive2(sess)) return null;
+        let st = null;
+        try {
+          st = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: c.deviceId } }, audio: false });
+          const tr = st.getVideoTracks()[0], caps = tr.getCapabilities?.() || {};
+          if (caps.facingMode && !caps.facingMode.includes("environment")) continue;
+          const pc = window.ImageCapture ? await new ImageCapture(tr).getPhotoCapabilities().catch(() => null) : null;
+          const w = pc?.imageWidth?.max || caps.width?.max || 0;
+          if (!best || w > best.w) best = { id: c.deviceId, w };
+        } catch {
+        } finally {
+          st?.getTracks().forEach((t) => t.stop());
+        }
+      }
+      return best?.id || null;
+    } catch {
+      return null;
+    }
+  }
+  async function openStream2(sess) {
+    if (!alive2(sess)) return;
+    const tok = ++ec.openTok;
+    stopStream2();
+    $("#eyeCamPaused").hidden = true;
+    let stream = null;
+    try {
+      const video = ec.deviceId ? { deviceId: { exact: ec.deviceId } } : { facingMode: "environment" };
+      stream = await navigator.mediaDevices.getUserMedia({ video: { ...video, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    } catch (e) {
+      console.warn(e);
+    }
+    if (!alive2(sess) || tok !== ec.openTok || document.hidden) {
+      stream?.getTracks().forEach((t) => t.stop());
+      if (alive2(sess) && tok === ec.openTok) pause2();
+      return;
+    }
+    if (!stream) {
+      $("#eyeCamNoCam").hidden = false;
+      $("#eyeCamShot").disabled = true;
+      say3("Caméra indisponible ou refusée : choisissez des photos à la place.", true);
+      return;
+    }
+    ec.stream = stream;
+    $("#eyeCamNoCam").hidden = true;
+    const v = $("#eyeCamVideo"), tr = stream.getVideoTracks()[0], ok = () => alive2(sess) && ec.stream === stream;
+    tr.onended = () => ok() && pause2();
+    v.srcObject = stream;
+    await v.play().catch(() => {
+    });
+    if (!ok()) return;
+    const pc = window.ImageCapture && !ec.noPhoto ? await new ImageCapture(tr).getPhotoCapabilities().catch(() => null) : null;
+    if (!ok()) return;
+    ec.photoW = pc?.imageWidth?.max || 0;
+    const zc = tr.getCapabilities?.().zoom;
+    ec.zoom = zc ? { min: zc.min, max: zc.max, v: tr.getSettings?.().zoom || 1 } : null;
+    $("#eyeCamZoomIn").hidden = $("#eyeCamZoomOut").hidden = !ec.zoom;
+    if (ec.zoom) await setZoom(Math.min(2, ec.zoom.max));
+    if (!ok()) return;
+    Object.assign(ec, { prev: null, okSince: 0, aimSince: 0, pending: "", pendingN: 0, saidN: 0, goal: MIN_FULL_PX });
+    $("#eyeCamShot").disabled = false;
+    say3("Visez l'œil et placez-le dans le cercle.", true);
+    loop2(sess, stream);
+  }
+  async function setZoom(z) {
+    const tr = ec.stream?.getVideoTracks()[0];
+    if (!tr || !ec.zoom) return;
+    z = Math.max(ec.zoom.min, Math.min(ec.zoom.max, z));
+    try {
+      await tr.applyConstraints({ advanced: [{ zoom: z }] });
+      ec.zoom.v = z;
+      $("#eyeCamZoomState").textContent = `Zoom ×${String(Math.round(z * 10) / 10).replace(".", ",")}`;
+    } catch {
+    }
+  }
+  var work2 = null;
+  async function loop2(sess, stream) {
+    if (!alive2(sess) || ec.stream !== stream) return;
+    const v = $("#eyeCamVideo"), t0 = performance.now();
+    if (v.readyState >= 2 && v.videoWidth && !ec.shooting) {
+      try {
+        const vw = v.videoWidth, vh = v.videoHeight, side = CROP * Math.min(vw, vh), W = FRAME, H = FRAME;
+        work2 ??= makeCanvas(W, H);
+        const g = work2.getContext("2d", { willReadFrequently: true });
+        g.drawImage(v, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, W, H);
+        const img = g.getImageData(0, 0, W, H), q = await quickIris(img);
+        if (!alive2(sess) || ec.stream !== stream) return;
+        const photoLong = ec.photoW || Math.max(vw, vh);
+        ec.k = side / W * (photoLong / Math.max(vw, vh)) / (ec.zoom?.v || 1);
+        step2(q, img, W, H, sess);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (!alive2(sess) || ec.stream !== stream) return;
+    const spent = performance.now() - t0;
+    ec.timer = setTimeout(() => loop2(sess, stream), Math.max(150, spent * 0.5));
+  }
+  function step2(q, img, W, H, sess) {
+    if (ec.shooting) return;
+    const now = performance.now();
+    let key, ok = false;
+    if (!q) {
+      key = "Visez l'œil et placez-le dans le cercle.";
+      ec.est = 0;
+    } else {
+      ec.est = 2 * q.r * ec.k;
+      const off = Math.hypot(q.cx - W / 2, q.cy - H / 2) / Math.min(W, H), big = q.r / Math.min(W, H);
+      let lum = 0, n = 0;
+      for (let y = Math.max(0, Math.round(q.cy - q.r)); y < Math.min(H, q.cy + q.r); y += 2)
+        for (let x = Math.max(0, Math.round(q.cx - q.r)); x < Math.min(W, q.cx + q.r); x += 2) {
+          const i = (y * W + x) * 4;
+          lum += 0.299 * img.data[i] + 0.587 * img.data[i + 1] + 0.114 * img.data[i + 2];
+          n++;
+        }
+      lum /= n || 1;
+      if (off > 0.18) key = "Centrez l'œil dans le cercle.";
+      else if (big > 0.42) key = "Un peu plus loin : la mise au point ne se fait pas de si près.";
+      else if (lum < 35) key = "Plus de lumière, de côté, sans flash.";
+      else if (ec.est < ec.goal) key = ec.zoom && ec.zoom.v < ec.zoom.max && ec.est < ec.goal * 0.8 ? "Plus près, ou zoomez." : "Plus près.";
+      else {
+        key = "Ne bougez plus.";
+        ok = true;
+      }
+    }
+    $("#eyeCamSize").textContent = ec.est ? `Iris estimé : ${Math.floor(ec.est)} px dans la photo (objectif ${ec.goal} px${ec.goal < MIN_FULL_PX ? ", mode réduit : 5 motifs sur 7" : ", les 7 motifs"}).` : "";
+    $("#eyeCamRing").classList.toggle("ok", ok);
+    const moved = !q || !ec.prev || Math.hypot(q.cx - ec.prev.cx, q.cy - ec.prev.cy) > 0.05 * W;
+    ec.prev = q;
+    if (q && !moved && ec.est >= MIN_MEASURE_PX && ec.est < MIN_FULL_PX && ec.goal === MIN_FULL_PX) {
+      ec.aimSince ||= now;
+      if (now - ec.aimSince > REDUCE_AFTER) {
+        ec.goal = MIN_MEASURE_PX;
+        say3("Mode réduit : 5 motifs sur 7 seront mesurés.", true);
+        return;
+      }
+    } else if (moved) ec.aimSince = 0;
+    if (!ok || moved) {
+      ec.okSince = 0;
+      if (key === ec.pending) ec.pendingN++;
+      else {
+        ec.pending = key;
+        ec.pendingN = 1;
+      }
+      if (ec.pendingN === 3 || ec.pendingN > 3 && ec.pendingN % 12 === 0 && ec.saidN < 3) {
+        ec.saidN = ec.pendingN === 3 ? 1 : ec.saidN + 1;
+        say3(key, ec.pendingN === 3);
+      }
+      const sc = Math.min(1, ec.est / ec.goal);
+      if (now - ec.beepAt > 1100 - 700 * sc) {
+        ec.beepAt = now;
+        beep2(500 + 400 * sc);
+      }
+      return;
+    }
+    if (!ec.okSince) {
+      ec.okSince = now;
+      buzz2(80);
+      say3(key);
+    }
+    if (now - ec.okSince >= 700) shoot2(sess, true);
+  }
+  async function shoot2(sess) {
+    const v = $("#eyeCamVideo"), stream = ec.stream;
+    if (ec.shooting || !alive2(sess) || !stream || v.readyState < 2) return;
+    const tok = ec.shooting = ++ec.shot, live = () => alive2(sess) && ec.stream === stream && ec.shooting === tok;
+    say3("Rafale…", true);
+    beep2(1200, 90);
+    const tr = stream.getVideoTracks()[0], files = [];
+    const ic = window.ImageCapture && !ec.noPhoto && ec.photoW && tr?.readyState === "live" ? new ImageCapture(tr) : null;
+    for (let k = 0; k < BURST && live(); k++) {
+      let blob = null;
+      if (ic) {
+        try {
+          blob = await Promise.race([ic.takePhoto({ imageWidth: ec.photoW }), new Promise((_, no) => setTimeout(() => no(new Error("délai")), 3e3))]);
+        } catch {
+          blob = null;
+        }
+        if (!live()) break;
+        if (!blob) {
+          ec.noPhoto = true;
+          ec.photoW = 0;
+          ec.shooting = 0;
+          ec.okSince = 0;
+          say3("Photo pleine résolution indisponible : rapprochez-vous encore.", true);
+          return;
+        }
+      }
+      if (!blob && v.videoWidth) {
+        const c = makeCanvas(v.videoWidth, v.videoHeight);
+        c.getContext("2d").drawImage(v, 0, 0);
+        blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.95));
+        c.width = c.height = 0;
+      }
+      if (blob) files.push(new File([blob], `oeil-${k + 1}.jpg`, { type: blob.type || "image/jpeg" }));
+      buzz2(30);
+    }
+    if (!live()) return;
+    ec.shooting = 0;
+    buzz2([100, 60, 100]);
+    const t = ec.target;
+    closeDialog();
+    if (files.length) t?.onBurst?.(files);
+  }
+  function stopStream2() {
+    clearTimeout(ec.timer);
+    ec.timer = null;
+    ec.stream?.getTracks().forEach((t) => t.stop());
+    ec.stream = null;
+    const v = $("#eyeCamVideo");
+    if (v) v.srcObject = null;
+  }
+  function stop() {
+    ec.session++;
+    ec.openTok++;
+    stopStream2();
+    ec.shooting = 0;
+    if (canSpeak2()) speechSynthesis.cancel();
+    ec.audio?.suspend?.().catch?.(() => {
+    });
+  }
+  var eyeCamState = () => ({ open: !!ec.stream, est: Math.round(ec.est), goal: ec.goal, text: $("#eyeCamText")?.textContent || "", shooting: !!ec.shooting, zoom: ec.zoom?.v ?? null });
+
+  // src/js/ui/aging.js
+  var target = null;
+  var last = null;
+  var memo = "";
+  function refresh2() {
+    const src = faceSources();
+    $("#agNoFace").hidden = !!src.length;
+    $("#agPanel").hidden = !src.length;
+    if (!src.length) {
+      last = null;
+      return;
+    }
+    const sid = fillSelect(
+      $("#agSrc"),
+      src.map((f) => ({ value: f.id, label: f.label }))
+    );
+    fillSelect(
+      $("#agModel"),
+      [{ value: "", label: "Aucun" }].concat(src.filter((f) => f.id !== sid).map((f) => ({ value: f.id, label: f.label })))
+    );
+    const s = findSource(sid), model = $("#agModel").value, sex = $("#agSex").value;
+    const need = [
+      s.age != null ? `<li class="ok">Âge réel connu : ${ageLabel(s.age)}</li>` : `<li class="miss">Indiquez l'âge réel (sinon l'âge estimé, ${ageLabel(s.det.age, true)}, est utilisé)</li>`,
+      s.det.warn.includes("Visage tourné") ? '<li class="miss">Photo de face conseillée : ce visage est tourné</li>' : '<li class="ok">Visage de face</li>',
+      sex ? '<li class="ok">Sexe précisé</li>' : `<li class="miss">Précisez le sexe si l'âge cible franchit la puberté</li>`,
+      model ? `<li class="ok">Modèle familial choisi (un parent photographié à l'âge cible, comme le font les portraitistes)</li>` : "<li>Facultatif : un parent photographié à l'âge cible rend la forme adulte plus plausible</li>"
+    ];
+    $("#agNeed").innerHTML = need.join("");
+    run2();
+  }
+  function run2() {
+    if (target == null) return;
+    const s = findSource($("#agSrc").value);
+    if (!s) return;
+    const modelSrc = $("#agModel").value ? findSource($("#agModel").value) : null;
+    const w = +$("#agW").value / 100, sex = $("#agSex").value;
+    const key = [s.id, s.det.id, s.age, target, sex, modelSrc?.det.id, w, cssVar("--sunk")].join("|");
+    if (key === memo && last) return;
+    memo = key;
+    const r = ageSimulate(s, target, { sex, model: modelSrc?.det, w, bg: cssVar("--sunk") });
+    last = { r, s };
+    const draw2 = (id, c) => {
+      const cv = $(id);
+      cv.width = c.width;
+      cv.height = c.height;
+      cv.getContext("2d").drawImage(c, 0, 0);
+    };
+    draw2("#agBefore", r.head);
+    draw2("#agAfter", r.out);
+    $("#agCapA").textContent = `${s.name} · ${ageLabel(r.from, s.age == null)}${s.age == null ? " (estimé)" : ""}`;
+    $("#agCapB").textContent = `Image simulée · ${ageLabel(r.to)}`;
+    stamp($("#agAfter"));
+    $("#agOut").hidden = false;
+    $("#agUse").hidden = false;
+  }
+  function initAging() {
+    $("#agTarget").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      target = +b.dataset.age;
+      $$("#agTarget button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      run2();
+    });
+    ["agSrc", "agSex", "agModel"].forEach((id) => $(`#${id}`).addEventListener("change", refresh2));
+    $("#agW").addEventListener("input", (e) => {
+      $("#agWv").textContent = `${e.target.value} %`;
+      run2();
+    });
+    $("#agUse").addEventListener("click", () => {
+      if (!last) return;
+      const { r, s } = last, c = makeCanvas(r.out.width * 2, r.out.height * 2), g = c.getContext("2d");
+      g.imageSmoothingQuality = "high";
+      g.drawImage(r.out, 0, 0, c.width, c.height);
+      sendToSlot(c, { name: `${s.name} ${Math.round(r.to)} ans (simulé)`.slice(0, 24), age: r.to, simulated: true }, s.slot != null ? [s.slot] : []);
+    });
+    on("faces", refresh2);
+    on("theme", () => {
+      memo = "";
+      refresh2();
+    });
+    refresh2();
+  }
+
+  // src/js/ui/fusion.js
+  var prep = null;
+  var prepKey = "";
+  var renderKey = "";
+  var result = null;
+  var playing = 0;
+  var reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function refresh22() {
+    const src = faceSources();
+    const enough = src.length >= 2;
+    $("#fuNoFace").hidden = enough;
+    $("#fuPanel").hidden = !enough;
+    if (!enough) {
+      prep = null;
+      return;
+    }
+    const opts = src.map((f) => ({ value: f.id, label: f.label }));
+    const a = fillSelect($("#fuA"), opts);
+    let b = fillSelect($("#fuB"), opts);
+    if (b === a) {
+      b = opts.find((o) => o.value !== a).value;
+      $("#fuB").value = b;
+    }
+    render2();
+  }
+  function ensurePrep() {
+    const A = findSource($("#fuA").value), B = findSource($("#fuB").value);
+    if (!A || !B) return null;
+    const key = [A.id, A.det.id, B.id, B.det.id, cssVar("--sunk")].join("|");
+    if (key !== prepKey) {
+      prep = prepareMorph(A, B, cssVar("--sunk"));
+      prepKey = key;
+      draw("#fuCa", vignetteCopy(prep.headA));
+      draw("#fuCb", vignetteCopy(prep.headB));
+      $("#fuCapA").textContent = A.name;
+      $("#fuCapB").textContent = B.name;
+      $("#fuNameA").textContent = A.name;
+      $("#fuNameB").textContent = B.name;
+    }
+    return prep;
+  }
+  var vignetteCopy = (c) => {
+    const o = makeCanvas(c.width, c.height);
+    o.getContext("2d").drawImage(c, 0, 0);
+    return vignette(o, cssVar("--sunk"));
+  };
+  var draw = (id, c) => {
+    const cv = $(id);
+    cv.width = c.width;
+    cv.height = c.height;
+    cv.getContext("2d").drawImage(c, 0, 0);
+  };
+  function compute(t, quick = false) {
+    const p = ensurePrep();
+    if (!p) return null;
+    const m = morph(p, t);
+    const ageA = p.A.age ?? p.A.det.age, ageB = p.B.age ?? p.B.det.age, from = ageA * (1 - t) + ageB * t;
+    const target2 = $("#fuAge").value;
+    let out = vignette(m.out, cssVar("--sunk")), age = from;
+    if (target2 && !quick) {
+      const det = { norm: m.norm, frame: HEAD_FRAME, age: from };
+      out = vignette(ageSimulate({ canvas: m.out, det, age: from, head: m.out }, +target2, { bg: cssVar("--sunk") }).out, cssVar("--sunk"));
+      age = +target2;
+    }
+    return { out, t, age, from, A: p.A, B: p.B };
+  }
+  function render2() {
+    const t = +$("#fuT").value / 100;
+    $("#fuTv").textContent = `${Math.round(t * 100)} %`;
+    const A = findSource($("#fuA").value), B = findSource($("#fuB").value);
+    const key = [A?.id, A?.det.id, A?.age, B?.id, B?.det.id, B?.age, t, $("#fuAge").value, cssVar("--sunk")].join("|");
+    if (key === renderKey && result) {
+      $("#fuCapA").textContent = A.name;
+      $("#fuCapB").textContent = B.name;
+      $("#fuNameA").textContent = A.name;
+      $("#fuNameB").textContent = B.name;
+      return;
+    }
+    renderKey = key;
+    result = compute(t);
+    if (!result) return;
+    draw("#fuCm", result.out);
+    stamp($("#fuCm"));
+    $("#fuCapM").textContent = `Image simulée · ${Math.round((1 - t) * 100)} / ${Math.round(t * 100)}${$("#fuAge").value ? ` · ${ageLabel(result.age)}` : ""}`;
+  }
+  var renderSoon = debounce(render2, 60);
+  function play() {
+    if (playing) {
+      stop2();
+      return;
+    }
+    if (reduceMotion()) {
+      toast("Animation désactivée (réglage « réduire les animations » de l'appareil).");
+      return;
+    }
+    $("#fuPlay").setAttribute("aria-pressed", "true");
+    $("#fuPlay").textContent = "Arrêter";
+    const t0 = performance.now();
+    const step3 = (now) => {
+      if (!playing) return;
+      const t = 0.5 - 0.5 * Math.cos((now - t0) / 4e3 * 2 * Math.PI);
+      const r = compute(t, true);
+      if (r) {
+        draw("#fuCm", r.out);
+        stamp($("#fuCm"));
+      }
+      $("#fuTv").textContent = `${Math.round(t * 100)} %`;
+      playing = requestAnimationFrame(step3);
+    };
+    playing = requestAnimationFrame(step3);
+  }
+  function stop2() {
+    cancelAnimationFrame(playing);
+    playing = 0;
+    $("#fuPlay").setAttribute("aria-pressed", "false");
+    $("#fuPlay").textContent = "Animer le fondu";
+    renderKey = "";
+    render2();
+  }
+  function initFusion() {
+    ["fuA", "fuB"].forEach(
+      (id) => $(`#${id}`).addEventListener("change", () => {
+        if ($("#fuA").value === $("#fuB").value) toast("Choisissez deux visages différents.");
+        render2();
+      })
+    );
+    $("#fuAge").addEventListener("change", render2);
+    $("#fuT").addEventListener("input", () => {
+      if (playing) stop2();
+      renderSoon();
+    });
+    $("#fuPlay").addEventListener("click", play);
+    $("#fuEnfant").addEventListener("click", () => {
+      if (playing) stop2();
+      $("#fuT").value = 50;
+      $("#fuAge").value = "7";
+      render2();
+    });
+    $("#fuUse").addEventListener("click", () => {
+      if (!result) return;
+      const c = makeCanvas(result.out.width * 2, result.out.height * 2), g = c.getContext("2d");
+      g.imageSmoothingQuality = "high";
+      g.drawImage(result.out, 0, 0, c.width, c.height);
+      const name = `Fusion ${result.A.name.slice(0, 8)}+${result.B.name.slice(0, 8)}`.slice(0, 24);
+      sendToSlot(
+        c,
+        { name, age: result.age, simulated: true },
+        [result.A.slot, result.B.slot].filter((x) => x != null)
+      );
+    });
+    on("faces", () => {
+      if (!playing) refresh22();
+    });
+    on("theme", () => {
+      prepKey = "";
+      renderKey = "";
+      refresh22();
+    });
+    on("mode", (m) => {
+      if (m !== "fusion" && playing) stop2();
+    });
+    refresh22();
+  }
+
   // src/js/ui/iris.js
   var MAX_SIDE = 2400;
   var MAX_BYTES = 20 * 1024 * 1024;
@@ -5869,7 +6217,7 @@
     return islots.some((o) => o !== s && o.src && o.name.trim().toLowerCase() === n.toLowerCase()) ? `${n} (iris ${s.i + 1})` : n;
   };
   var EYE = { G: "œil gauche", D: "œil droit" };
-  var say3 = (t) => {
+  var say4 = (t) => {
     const r = $("#srStatus");
     if (r) r.textContent = t;
   };
@@ -5881,7 +6229,7 @@
       run3.busy = false;
       $("#irisCancel").hidden = true;
       $("#irisStatus").textContent = "Comparaison interrompue : un iris a changé.";
-      say3("Comparaison interrompue : un iris a changé.");
+      say4("Comparaison interrompue : un iris a changé.");
     }
     run3.res = null;
     $("#irisResults").hidden = true;
@@ -5899,6 +6247,7 @@
     <div class="iact">
       <button type="button" class="btn small" data-act="pick" aria-label="Importer une photo, iris ${n}">Importer une photo</button>
       <button type="button" class="btn small" data-act="burst" aria-label="Plusieurs photos (rafale), iris ${n}">Plusieurs photos (rafale)</button>
+      <button type="button" class="btn small" data-act="eyecam" aria-label="Photographier l'œil (caméra arrière), iris ${n}">Photographier l'œil (caméra arrière)</button>
       <button type="button" class="btn small" data-act="fix" aria-label="Corriger les repères, iris ${n}" hidden>Corriger les repères</button>
       <button type="button" class="btn small" data-act="frombase" aria-label="Depuis ma base, iris ${n}" hidden>Depuis ma base</button>
       <button type="button" class="btn small" data-act="keep" aria-label="Garder dans ma base, iris ${n}" hidden>Garder dans ma base</button>
@@ -5983,6 +6332,7 @@
     e.dataset.status = s.status;
     $("[data-act=pick]", e).disabled = !agreed() || s.status === "busy";
     $("[data-act=burst]", e).disabled = !agreed() || s.status === "busy";
+    $("[data-act=eyecam]", e).disabled = !agreed() || s.status === "busy" || !navigator.mediaDevices?.getUserMedia;
     $("[data-act=fix]", e).hidden = !has || s.status === "busy";
     $("[data-act=fix]", e).classList.toggle("primary", s.status === "tofix");
     $("[data-act=clear]", e).hidden = !has;
@@ -6049,7 +6399,7 @@
     if (lm?.eyes?.length === 2) {
       const ask = open2 && canAutoOpen(), pick = ask ? await chooseEye(s, lm.eyes, gen) : null;
       if (gen !== s.gen) return;
-      if (!ask) say3("Deux yeux sur la photo : l'œil le plus net est gardé.");
+      if (!ask) say4("Deux yeux sur la photo : l'œil le plus net est gardé.");
       let f = null;
       try {
         f = await focusEye(s, pick ? pick.eye : lm.eyes[0], gen);
@@ -6061,7 +6411,7 @@
         Object.assign(s, { src: f.src, img: f.img, map: f.map, cache: null, eye: pick ? pick.side : s.eye });
         lm = f.lm;
         focused = f.native;
-      } else if (pick) say3("Œil choisi non repéré : l'autre œil est gardé, corrigez les repères au besoin.");
+      } else if (pick) say4("Œil choisi non repéré : l'autre œil est gardé, corrigez les repères au besoin.");
     }
     if (lm && s.native && !focused) {
       try {
@@ -6083,7 +6433,7 @@
       s.msg = "Œil repéré seulement à peu près : ajustez la pupille et le bord de l'iris (« Corriger les repères »), puis validez.";
       s.warn = "1";
       renderSlot2(s);
-      say3(`${nameOf(s)} : ${s.msg}`);
+      say4(`${nameOf(s)} : ${s.msg}`);
       if (open2 && canAutoOpen()) openFix(s);
       return;
     }
@@ -6093,7 +6443,7 @@
       s.msg = "Iris non trouvé automatiquement : placez les repères (« Corriger les repères »), puis validez.";
       s.warn = "1";
       renderSlot2(s);
-      say3(`${nameOf(s)} : iris non trouvé, repères à placer à la main.`);
+      say4(`${nameOf(s)} : iris non trouvé, repères à placer à la main.`);
       if (open2 && canAutoOpen()) openFix(s);
       return;
     }
@@ -6107,13 +6457,24 @@
       renderSlot2(s);
       return;
     }
+    if (lm.auto && contourIrregular(lm)) {
+      s.status = "tofix";
+      s.lm = lm;
+      s.lmAuto = lm;
+      s.msg = "Contour de l'iris très irrégulier (paupière ou reflet pris pour le bord ?) : vérifiez les repères, masquez la paupière au besoin (« Masquer une zone »), puis validez." + smallNote(lm);
+      s.warn = "1";
+      renderSlot2(s);
+      say4(`${nameOf(s)} : contour de l'iris irrégulier, repères à vérifier.`);
+      if (open2 && canAutoOpen()) openFix(s);
+      return;
+    }
     s.lm = lm;
     s.lmAuto = lm;
     s.status = "ready";
     s.msg = (lm.seen < 0.4 ? `Repérage incertain (bord de l'iris peu visible) : vérifiez les repères.` : `Iris repéré en ${secs} s.`) + smallNote(lm);
     s.warn = lm.seen < 0.4 ? "1" : "";
     renderSlot2(s);
-    say3(`${nameOf(s)} : ${s.msg}`);
+    say4(`${nameOf(s)} : ${s.msg}`);
   }
   async function recropNative(s, lm, gen) {
     const m = s.map || { ox: 0, oy: 0, f: 1 };
@@ -6370,7 +6731,7 @@
         fix.img = v.img;
         fix.kFull = v.k;
         drawFix();
-        say3("Photo entière chargée : dézoomez pour la voir.");
+        say4("Photo entière chargée : dézoomez pour la voir.");
       }).catch((e) => console.warn(e));
     }
   }
@@ -6499,12 +6860,12 @@
     drawFix();
   }
   function nudge(h, dx, dy, big, size = null) {
-    const step2 = Math.max(0.25, 2 / fix.k) * (big === true ? 10 : big === "btn" ? 4 : 1), [x, y] = handlePos(h);
-    if (h === "c" || h === "ic" || h === "m") return applyMove(h, x + dx * step2, y + dy * step2);
+    const step3 = Math.max(0.25, 2 / fix.k) * (big === true ? 10 : big === "btn" ? 4 : 1), [x, y] = handlePos(h);
+    if (h === "c" || h === "ic" || h === "m") return applyMove(h, x + dx * step3, y + dy * step3);
     const grow = size ?? (dy < 0 ? 1 : dy > 0 ? -1 : h === "p" ? Math.sign(dx) : -Math.sign(dx));
-    if (h === "p") return applyMove("p", fix.lm.cx + fix.lm.rp + grow * step2, fix.lm.cy);
+    if (h === "p") return applyMove("p", fix.lm.cx + fix.lm.rp + grow * step3, fix.lm.cy);
     const c = irisCircle();
-    applyMove("i", c.cx - (c.r + grow * step2), c.cy);
+    applyMove("i", c.cx - (c.r + grow * step3), c.cy);
   }
   function pointerToImage(e) {
     const r = $("#irisFixCanvas").getBoundingClientRect(), W = $("#irisFixCanvas").width;
@@ -6762,12 +7123,12 @@
     if (list.length < 2 || run3.busy) return;
     run3.busy = true;
     const gen = ++run3.gen, t0 = performance.now();
-    let step2 = "";
-    const st = $("#irisStatus"), paint = () => gen === run3.gen && (st.textContent = `${step2} (${Math.round((performance.now() - t0) / 1e3)} s)`);
+    let step3 = "";
+    const st = $("#irisStatus"), paint = () => gen === run3.gen && (st.textContent = `${step3} (${Math.round((performance.now() - t0) / 1e3)} s)`);
     const tick = setInterval(paint, 1e3);
     $("#irisCancel").hidden = false;
     updateGo();
-    say3("Comparaison des iris : analyse en cours.");
+    say4("Comparaison des iris : analyse en cours.");
     try {
       for (const [n, s] of list.entries()) {
         const key = `${JSON.stringify(packLandmarks(s.lm))}|${s.eye}`;
@@ -6776,7 +7137,7 @@
           mirror: s.eye === "G",
           stop: () => gen !== run3.gen,
           onStep: (t) => {
-            step2 = `Iris ${n + 1} sur ${list.length} : ${t}…`;
+            step3 = `Iris ${n + 1} sur ${list.length} : ${t}…`;
             paint();
           }
         });
@@ -6786,9 +7147,18 @@
       }
       if (gen !== run3.gen) return;
       run3.res = list.map((s) => ({ s, eye: s.eye, ...s.cache.res }));
+      const low = run3.res.filter((r) => irisDiameter(r.s.lm) >= MIN_MEASURE_PX && irisDiameter(r.s.lm) < MIN_FULL_PX);
+      run3.level = low.length ? "reduit" : "complet";
+      if (low.length) {
+        for (const r of run3.res)
+          if (irisDiameter(r.s.lm) >= MIN_FULL_PX) {
+            r.F = { ...r.F, filaments_coeur: null, collerette: null };
+            r.why = { ...r.why, filaments_coeur: "niveau réduit : un autre iris fait moins de 300 px", collerette: "niveau réduit : un autre iris fait moins de 300 px" };
+          }
+      }
       renderResults2();
       st.textContent = `Comparaison terminée en ${Math.round((performance.now() - t0) / 1e3)} s.`;
-      say3(`Comparaison des iris terminée.${$("#irisSmallWarn").hidden ? "" : " " + $("#irisSmallWarn").textContent}`);
+      say4(`Comparaison des iris terminée.${$("#irisSmallWarn").hidden ? "" : " " + $("#irisSmallWarn").textContent}`);
     } catch (e) {
       if (gen !== run3.gen) return;
       console.error(e);
@@ -6839,7 +7209,7 @@
     for (const cv of $$("canvas", box)) drawBand(cv, R[cv.dataset.k]);
     const small = R.filter(tooSmall);
     $("#irisSmallWarn").hidden = !small.length;
-    $("#irisSmallWarn").textContent = small.length ? `${small.map((r) => `Iris de ${nm2(r)} : ${Math.floor(irisDiameter(r.s.lm))} px de diamètre`).join(" ; ")}. Motifs mesurés à partir de ${MIN_MEASURE_PX} px, filaments du cœur et collerette à partir de ${MIN_FULL_PX} px : pour tout mesurer, importez une photo plus rapprochée ou prise au zoom.` : "";
+    $("#irisSmallWarn").textContent = small.length ? `${small.map((r) => `Iris de ${nm2(r)} : ${Math.floor(irisDiameter(r.s.lm))} px de diamètre`).join(" ; ")}. Motifs mesurés à partir de ${MIN_MEASURE_PX} px, filaments du cœur et collerette à partir de ${MIN_FULL_PX} px : pour tout mesurer, importez une photo plus rapprochée ou prise au zoom.${run3.level === "reduit" && R.length > 1 ? " Comparaison au niveau réduit : 5 motifs sur 7, pour tous les iris." : ""}` : "";
     const eyes = new Set(R.map((r) => r.eye));
     $("#irisEyeWarn").hidden = eyes.size < 2;
     const trioMode = R.length === 3 && R[0].s.i === 0;
@@ -6976,6 +7346,7 @@
       const s = islots[Number(b.closest(".islot").dataset.i)], act = b.dataset.act;
       if (act === "pick") $("[data-f=file]", el2(s)).click();
       else if (act === "burst") $("[data-f=burst]", el2(s)).click();
+      else if (act === "eyecam") openEyeCam({ name: nameOf(s), onBurst: (files) => runBurst(s, files), pickFiles: () => $("[data-f=burst]", el2(s)).click() });
       else if (act === "fix") openFix(s);
       else if (act === "clear") {
         clearSlot2(s);
@@ -7013,7 +7384,7 @@
       run3.gen++;
       run3.busy = false;
       $("#irisStatus").textContent = "Comparaison annulée.";
-      say3("Comparaison annulée.");
+      say4("Comparaison annulée.");
       $("#irisCancel").hidden = true;
       updateGo();
       $("#irisGo").focus();
@@ -7079,7 +7450,7 @@
       eyePick.best = marked ? best : -1;
       openDialog($("#irisEyeSheet"), () => eyePick.resolve?.(null));
       if (marked) $(`[data-eye="${best}"]`, box)?.focus();
-      say3("Deux yeux sur la photo : choisissez celui à comparer.");
+      say4("Deux yeux sur la photo : choisissez celui à comparer.");
     });
   }
   async function focusEye(s, e, gen) {
@@ -7113,10 +7484,10 @@
   }
   var MAX_BURST = 20;
   var burst = { s: null, gen: 0, status: "idle", done: 0, total: 0, top: [], why: "" };
-  var burstKey = (c) => [c.found ? 1 : 0, c.measurable ? 1 : 0, c.d >= MIN_FULL_PX ? 1 : 0, c.found ? c.sharp * c.seen * Math.max(0, 1 - c.reflets - c.paupieres) : 0];
+  var burstKey = (c) => [c.found ? 1 : 0, c.regular ? 1 : 0, c.measurable ? 1 : 0, c.d >= MIN_FULL_PX ? 1 : 0, c.found ? c.sharp * c.seen * Math.max(0, 1 - c.reflets - c.paupieres) : 0];
   var better = (a, b) => {
     const A = burstKey(a), B = burstKey(b);
-    for (let i = 0; i < 4; i++) if (A[i] !== B[i]) return A[i] > B[i];
+    for (let i = 0; i < 5; i++) if (A[i] !== B[i]) return A[i] > B[i];
     return false;
   };
   function stopBurst() {
@@ -7149,7 +7520,7 @@
       if (burst.gen !== gen) return;
       $("#irisBurstProg").value = n / files.length;
       $("#irisBurstStep").textContent = `Photo ${n + 1} sur ${files.length}`;
-      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, measurable: false, sharp: 0, seen: 0, reflets: 0, paupieres: 0, d: 0, thumb: null };
+      const c = { file: files[n], name: files[n].name || `Photo ${n + 1}`, found: false, regular: false, measurable: false, sharp: 0, seen: 0, reflets: 0, paupieres: 0, d: 0, thumb: null };
       try {
         const full = await decodeFull(files[n]);
         let cv, g, k;
@@ -7170,6 +7541,7 @@
           c.found = true;
           c.d = irisDiameter(lm) / k;
           c.measurable = c.d >= MIN_MEASURE_PX;
+          c.regular = !contourIrregular(lm);
           c.seen = lm.seen ?? 1;
           Object.assign(c, photoQuality(img, lm));
           const half = irisDiameter(lm) / 2 * 1.3, t = makeCanvas(160, 160);
@@ -7199,7 +7571,7 @@
   }
   function burstReason(c, i) {
     const net = c.sharp >= 0.5 ? "nette" : c.sharp >= SHARPNESS_MIN ? "un peu floue" : "floue";
-    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.floor(c.d)} px${!c.measurable ? " (trop petit pour mesurer)" : c.d < MIN_FULL_PX ? " (5 motifs sur 7)" : ""}`, `bord vu à ${Math.round(c.seen * 100)} %`];
+    const parts = [i === 0 ? "Meilleure photo" : `N° ${i + 1}`, net, `iris ${Math.floor(c.d)} px${c.found && !c.regular ? " (contour irrégulier, à vérifier)" : ""}${!c.measurable ? " (trop petit pour mesurer)" : c.d < MIN_FULL_PX ? " (5 motifs sur 7)" : ""}`, `bord vu à ${Math.round(c.seen * 100)} %`];
     if (c.paupieres >= 0.03) parts.push(`paupière ${Math.round(c.paupieres * 100)} %`);
     if (c.reflets >= 0.03) parts.push(`reflets ${Math.round(c.reflets * 100)} %`);
     return parts.join(" · ");
@@ -7234,7 +7606,7 @@
   var irisState = () => ({
     fix: fix.s ? { ox: +fix.ox.toFixed(1), oy: +fix.oy.toFixed(1), half: +fix.half.toFixed(1), full: !!fix.kFull, mask: fix.mask.length, strokes: fix.strokes.length, maskOn: !!fix.maskOn } : null,
     eyePick: { open: !!eyePick.resolve, best: eyePick.best ?? -1 },
-    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
+    burst: { status: burst.status, done: burst.done, total: burst.total, why: burst.why, top: burst.top.map((c) => ({ name: c.name, d: Math.round(c.d), regular: !!c.regular, measurable: c.measurable, sharp: +c.sharp.toFixed(3), seen: +c.seen.toFixed(2), reflets: +c.reflets.toFixed(3), paupieres: +c.paupieres.toFixed(3) })) },
     slots: islots.map((s) => ({ gen: s.gen, status: s.status, has: !!s.src, echelle: s.map ? +s.map.f.toFixed(3) : null, lm: s.lm ? { cx: s.lm.cx, cy: s.lm.cy, rp: s.lm.rp, ri: irisDiameter(s.lm) / 2, auto: !!s.lm.auto, mask: s.lm.mask?.length || 0 } : null, eye: s.eye, kept: !!s.baseRef, msg: s.msg })),
     results: run3.res ? run3.res.map((r) => ({ name: r.name, F: r.F })) : null,
     text: resultText()
@@ -7359,6 +7731,7 @@
     initPicker();
     initMasks();
     initCapture();
+    initEyeCam();
     $("#privacyBtn").addEventListener("click", () => openDialog($("#privacySheet")));
     initResults();
     initAlbum();
@@ -7373,18 +7746,18 @@
     slots.forEach(renderSlot);
     renderResults();
     const t0 = Date.now();
-    let step2 = "Chargement du moteur d’analyse (13 Mo, une seule fois)…";
+    let step3 = "Chargement du moteur d’analyse (13 Mo, une seule fois)…";
     const show = () => {
       if (engine.ready) return;
       const s = Math.round((Date.now() - t0) / 1e3);
       const slow = s >= 40 ? " Connexion lente : patientez, le téléchargement continue." : "";
-      $("#engineTxt").textContent = `${step2} (${s} s)${slow}`;
+      $("#engineTxt").textContent = `${step3} (${s} s)${slow}`;
     };
     show();
     const tick = setInterval(show, 1e3);
     try {
       await loadEngine((text) => {
-        step2 = text;
+        step3 = text;
         show();
       });
       engine.ready = true;
@@ -7420,6 +7793,7 @@
     guide,
     GUIDE,
     camState,
+    eyeCamState,
     baseState,
     albumInject: (canvas, det, meta) => {
       albumFace(canvas, det, meta);
@@ -7428,7 +7802,7 @@
     // Cadres des visages de l'album (coordonnées du recadrage), pour vérifier le masquage (AdF-044).
     albumBoxes: () => album.faces.map((f) => ({ x: f.det.box.x, y: f.det.box.y, w: f.det.box.width, h: f.det.box.height, kept: !!f.baseRef })),
     live: { detectLive, liveMeasure, lumStats },
-    iris: { state: irisState },
+    iris: { state: irisState, contourIrregular: (ro) => contourIrregular({ ro }) },
     moteur: { normalize, measures, symmetrize, appearance, sampleColors, quality }
   };
   boot();

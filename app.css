@@ -324,6 +324,8 @@ input[type=range]{accent-color:var(--accent)}
 .camview video.mirror{transform:scaleX(-1)}
 .camframe{position:absolute;left:50%;top:50%;width:44%;aspect-ratio:100/136;transform:translate(-50%,-50%);border:4px dashed rgba(255,255,255,.75);border-radius:50%}
 .camframe.ok{border-style:solid;border-color:#3fd16b}
+.eyering{position:absolute;left:50%;top:50%;width:46%;aspect-ratio:1;transform:translate(-50%,-50%);border:4px dashed rgba(255,255,255,.8);border-radius:50%}
+.eyering.ok{border-style:solid;border-color:#3fd16b}
 .camtext{font-size:1.35rem;font-weight:700;color:var(--ink);text-align:center;min-height:3.2em;margin:10px 0;outline:none}
 .camctl{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .camctl #camShot{flex-basis:100%;font-size:1.1rem;padding:14px}
